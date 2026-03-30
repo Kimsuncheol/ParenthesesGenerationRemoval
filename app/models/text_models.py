@@ -10,6 +10,15 @@ class RemoveParenthesesResponse(BaseModel):
     result_text: str
 
 
+class RomanizeRequest(BaseModel):
+    text: str
+
+
+class RomanizeResponse(BaseModel):
+    original_text: str
+    romanized_text: str
+
+
 class GenerateParenthesesRequest(BaseModel):
     text: str
 

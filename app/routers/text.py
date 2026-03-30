@@ -5,10 +5,12 @@ from app.models.text_models import (
     GenerateParenthesesResponse,
     RemoveParenthesesRequest,
     RemoveParenthesesResponse,
+    RomanizeRequest,
+    RomanizeResponse,
     TranslateRequest,
     TranslateResponse,
 )
-from app.services import parentheses_service, translation_service
+from app.services import parentheses_service, romanization_service, translation_service
 
 router = APIRouter(prefix="/text", tags=["text"])
 
@@ -25,6 +27,12 @@ def generate_parentheses_endpoint(body: GenerateParenthesesRequest) -> GenerateP
     result = parentheses_service.generate_parentheses(body.text)
     print(result)
     return GenerateParenthesesResponse(original_text=body.text, result_text=result)
+
+
+@router.post("/romanize", response_model=RomanizeResponse)
+def romanize_endpoint(body: RomanizeRequest) -> RomanizeResponse:
+    result = romanization_service.romanize_ja(body.text)
+    return RomanizeResponse(original_text=body.text, romanized_text=result)
 
 
 @router.post("/translate", response_model=TranslateResponse)
