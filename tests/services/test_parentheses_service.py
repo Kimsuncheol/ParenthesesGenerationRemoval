@@ -103,6 +103,21 @@ GENERATE_CASES = [
         "いい方法が見つかる。",
         "いい方()法()が見()つかる。",
     ),
+    # numbers: fullwidth digits
+    (
+        "テキストの３５ページを平手ください。",
+        "テキストの３()５()ページを平()手()ください。",
+    ),
+    # numbers: ASCII digits
+    (
+        "35ページを読む。",
+        "3()5()ページを読()む。",
+    ),
+    # numbers: mixed fullwidth and ASCII
+    (
+        "問題１2を解く。",
+        "問()題()１()2()を解()く。",
+    ),
 ]
 # fmt: on
 
