@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(python -m pip install ipadic)",
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "Bash(/Library/Frameworks/Python.framework/Versions/3.12/bin/pip3 install:*)",
+      "Bash(/Library/Frameworks/Python.framework/Versions/3.12/bin/python3 -c \":*)"
     ]
   }
 }

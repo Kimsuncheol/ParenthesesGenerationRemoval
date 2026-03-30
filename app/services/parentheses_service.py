@@ -1,6 +1,11 @@
+import re
+
 _OPEN_BRACKETS = set("([{<")
 _BRACKET_PAIRS = {"(": ")", "[": "]", "{": "}", "<": ">"}
 _CLOSE_BRACKETS = set(_BRACKET_PAIRS.values())
+
+# Matches digits+. that form a list marker, at start of text or right after 。
+_LIST_MARKER_RE = re.compile(r'(?:^|(?<=。))([0-9]+)\.')
 
 
 def _needs_parentheses(char: str) -> bool:
@@ -13,11 +18,19 @@ def _needs_parentheses(char: str) -> bool:
     )
 
 
+def _list_marker_indices(text: str) -> set[int]:
+    protected: set[int] = set()
+    for m in _LIST_MARKER_RE.finditer(text):
+        protected.update(range(m.start(1), m.end(1)))
+    return protected
+
+
 def generate_parentheses(text: str) -> str:
+    protected = _list_marker_indices(text)
     result: list[str] = []
-    for char in text:
+    for i, char in enumerate(text):
         result.append(char)
-        if _needs_parentheses(char):
+        if _needs_parentheses(char) and i not in protected:
             result.append("()")
     return "".join(result)
 
