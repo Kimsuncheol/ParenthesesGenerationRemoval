@@ -8,3 +8,12 @@ class RemoveParenthesesRequest(BaseModel):
 class RemoveParenthesesResponse(BaseModel):
     original_text: str
     result_text: str
+
+
+class GenerateParenthesesRequest(BaseModel):
+    text: str
+
+
+class GenerateParenthesesResponse(BaseModel):
+    original_text: str
+    result_text: str

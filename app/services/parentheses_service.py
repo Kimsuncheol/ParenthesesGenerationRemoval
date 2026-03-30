@@ -3,6 +3,20 @@ _BRACKET_PAIRS = {"(": ")", "[": "]", "{": "}", "<": ">"}
 _CLOSE_BRACKETS = set(_BRACKET_PAIRS.values())
 
 
+def _is_kanji(char: str) -> bool:
+    cp = ord(char)
+    return 0x4E00 <= cp <= 0x9FFF or 0x3400 <= cp <= 0x4DBF
+
+
+def generate_parentheses(text: str) -> str:
+    result: list[str] = []
+    for char in text:
+        result.append(char)
+        if _is_kanji(char):
+            result.append("()")
+    return "".join(result)
+
+
 def remove_parentheses(text: str) -> str:
     stack: list[str] = []
     result: list[str] = []

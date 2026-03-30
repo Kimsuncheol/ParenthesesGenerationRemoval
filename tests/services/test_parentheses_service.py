@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.parentheses_service import remove_parentheses
+from app.services.parentheses_service import generate_parentheses, remove_parentheses
 
 # fmt: off
 SAMPLE_CASES = [
@@ -67,3 +67,46 @@ SAMPLE_CASES = [
 @pytest.mark.parametrize("text, expected", SAMPLE_CASES)
 def test_remove_parentheses_furigana(text: str, expected: str) -> None:
     assert remove_parentheses(text) == expected
+
+
+# fmt: off
+GENERATE_CASES = [
+    (
+        "電車の中で足を踏まれた。",
+        "電()車()の中()で足()を踏()まれた。",
+    ),
+    (
+        "先生が生徒を褒める。",
+        "先()生()が生()徒()を褒()める。",
+    ),
+    (
+        "明日また参ります。",
+        "明()日()また参()ります。",
+    ),
+    (
+        "試合に負ける。",
+        "試()合()に負()ける。",
+    ),
+    (
+        "答えを間違える。",
+        "答()えを間()違()える。",
+    ),
+    (
+        "私は中山と申します。",
+        "私()は中()山()と申()します。",
+    ),
+    (
+        "本を本棚に戻す。",
+        "本()を本()棚()に戻()す。",
+    ),
+    (
+        "いい方法が見つかる。",
+        "いい方()法()が見()つかる。",
+    ),
+]
+# fmt: on
+
+
+@pytest.mark.parametrize("text, expected", GENERATE_CASES)
+def test_generate_parentheses(text: str, expected: str) -> None:
+    assert generate_parentheses(text) == expected
