@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException
 
 from app.models.text_models import (
+    AddFuriganaRequest,
+    AddFuriganaResponse,
     GenerateParenthesesRequest,
     GenerateParenthesesResponse,
     RemoveParenthesesRequest,
@@ -10,7 +12,7 @@ from app.models.text_models import (
     TranslateRequest,
     TranslateResponse,
 )
-from app.services import parentheses_service, romanization_service, translation_service
+from app.services import furigana_service, parentheses_service, romanization_service, translation_service
 
 router = APIRouter(prefix="/text", tags=["text"])
 
@@ -32,7 +34,14 @@ def generate_parentheses_endpoint(body: GenerateParenthesesRequest) -> GenerateP
 @router.post("/romanize", response_model=RomanizeResponse)
 def romanize_endpoint(body: RomanizeRequest) -> RomanizeResponse:
     result = romanization_service.romanize_ja(body.text)
+    print(result);
     return RomanizeResponse(original_text=body.text, romanized_text=result)
+
+
+@router.post("/add-furigana", response_model=AddFuriganaResponse)
+def add_furigana_endpoint(body: AddFuriganaRequest) -> AddFuriganaResponse:
+    result = furigana_service.add_furigana(body.text)
+    return AddFuriganaResponse(original_text=body.text, result_text=result)
 
 
 @router.post("/translate", response_model=TranslateResponse)

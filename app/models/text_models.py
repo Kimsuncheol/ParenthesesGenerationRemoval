@@ -35,3 +35,12 @@ class TranslateRequest(BaseModel):
 class TranslateResponse(BaseModel):
     original_text: str
     translated_text: str
+
+
+class AddFuriganaRequest(BaseModel):
+    text: str
+
+
+class AddFuriganaResponse(BaseModel):
+    original_text: str
+    result_text: str
