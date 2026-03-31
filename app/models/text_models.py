@@ -10,6 +10,16 @@ class RemoveParenthesesResponse(BaseModel):
     result_text: str
 
 
+class RemoveFuriganaRequest(BaseModel):
+    text: str
+    remove_brackets: bool = True
+
+
+class RemoveFuriganaResponse(BaseModel):
+    original_text: str
+    result_text: str
+
+
 class RomanizeRequest(BaseModel):
     text: str
 
@@ -35,6 +45,24 @@ class TranslateRequest(BaseModel):
 class TranslateResponse(BaseModel):
     original_text: str
     translated_text: str
+
+
+class VocabularyEntry(BaseModel):
+    word: str | None
+    reading: str | None
+    romanized: str | None
+    meanings: list[str]
+    part_of_speech: list[str]
+    is_common: bool
+
+
+class VocabularyLookupRequest(BaseModel):
+    text: str
+
+
+class VocabularyLookupResponse(BaseModel):
+    original_text: str
+    entry: VocabularyEntry | None
 
 
 class AddFuriganaRequest(BaseModel):

@@ -1,13 +1,16 @@
 import sys
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from main import app
+from app.services import vocabulary_service
 
 client = TestClient(app)
+VOCABULARY_FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "vocabulary_entries.json"
 
 
 PLACEHOLDER_ONLY_INPUT = """スイッチを入()れる。
@@ -129,3 +132,71 @@ def test_add_furigana_endpoint_fills_mixed_block() -> None:
         "original_text": MIXED_INPUT,
         "result_text": MIXED_EXPECTED,
     }
+
+
+def test_remove_furigana_endpoint_removes_brackets_by_default() -> None:
+    text = "日本(にほん)へ行く"
+
+    response = client.post("/text/remove-furigana", json={"text": text})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": text,
+        "result_text": "日本へ行く",
+    }
+
+
+def test_remove_furigana_endpoint_keeps_empty_brackets_when_requested() -> None:
+    text = "日本(にほん)と先生[せんせい]とnote (test)"
+
+    response = client.post(
+        "/text/remove-furigana",
+        json={"text": text, "remove_brackets": False},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": text,
+        "result_text": "日本()と先生[]とnote (test)",
+    }
+
+
+@pytest.fixture(autouse=True)
+def use_fixture_dictionary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(vocabulary_service, "VOCABULARY_DATA_PATH", VOCABULARY_FIXTURE_PATH)
+    vocabulary_service._load_dictionary.cache_clear()
+    yield
+    vocabulary_service._load_dictionary.cache_clear()
+
+
+def test_vocabulary_endpoint_returns_best_match() -> None:
+    response = client.post("/text/vocabulary", json={"text": "猫"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "猫",
+        "entry": {
+            "word": "猫",
+            "reading": "ねこ",
+            "romanized": "neko",
+            "meanings": ["cat"],
+            "part_of_speech": ["noun"],
+            "is_common": True,
+        },
+    }
+
+
+def test_vocabulary_endpoint_returns_null_entry_for_no_match() -> None:
+    response = client.post("/text/vocabulary", json={"text": "cat"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "cat",
+        "entry": None,
+    }
+
+
+def test_vocabulary_endpoint_validates_payload() -> None:
+    response = client.post("/text/vocabulary", json={"query": "猫"})
+
+    assert response.status_code == 422

@@ -5,14 +5,24 @@ from app.models.text_models import (
     AddFuriganaResponse,
     GenerateParenthesesRequest,
     GenerateParenthesesResponse,
+    RemoveFuriganaRequest,
+    RemoveFuriganaResponse,
     RemoveParenthesesRequest,
     RemoveParenthesesResponse,
     RomanizeRequest,
     RomanizeResponse,
     TranslateRequest,
     TranslateResponse,
+    VocabularyLookupRequest,
+    VocabularyLookupResponse,
 )
-from app.services import furigana_service, parentheses_service, romanization_service, translation_service
+from app.services import (
+    furigana_service,
+    parentheses_service,
+    romanization_service,
+    translation_service,
+    vocabulary_service,
+)
 
 router = APIRouter(prefix="/text", tags=["text"])
 
@@ -22,6 +32,13 @@ def remove_parentheses_endpoint(body: RemoveParenthesesRequest) -> RemoveParenth
     result = parentheses_service.remove_parentheses(body.text)
     print(result)
     return RemoveParenthesesResponse(original_text=body.text, result_text=result)
+
+
+@router.post("/remove-furigana", response_model=RemoveFuriganaResponse)
+def remove_furigana_endpoint(body: RemoveFuriganaRequest) -> RemoveFuriganaResponse:
+    result = furigana_service.remove_furigana(body.text, remove_brackets=body.remove_brackets)
+    print(result)
+    return RemoveFuriganaResponse(original_text=body.text, result_text=result)
 
 
 @router.post("/generate-parentheses", response_model=GenerateParenthesesResponse)
@@ -41,7 +58,7 @@ def romanize_endpoint(body: RomanizeRequest) -> RomanizeResponse:
 @router.post("/add-furigana", response_model=AddFuriganaResponse)
 def add_furigana_endpoint(body: AddFuriganaRequest) -> AddFuriganaResponse:
     result = furigana_service.add_furigana(body.text)
-    print(result);
+    print(result)
     return AddFuriganaResponse(original_text=body.text, result_text=result)
 
 
@@ -52,3 +69,9 @@ def translate_endpoint(body: TranslateRequest) -> TranslateResponse:
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Translation API error: {e}")
     return TranslateResponse(original_text=body.text, translated_text=translated)
+
+
+@router.post("/vocabulary", response_model=VocabularyLookupResponse)
+def vocabulary_lookup_endpoint(body: VocabularyLookupRequest) -> VocabularyLookupResponse:
+    entry = vocabulary_service.lookup_vocabulary(body.text)
+    return VocabularyLookupResponse(original_text=body.text, entry=entry)

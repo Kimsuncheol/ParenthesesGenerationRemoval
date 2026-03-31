@@ -1,0 +1,58 @@
+[
+  {
+    "word": "猫",
+    "reading": "ねこ",
+    "meanings": ["cat"],
+    "part_of_speech": ["noun"],
+    "is_common": true
+  },
+  {
+    "word": "食べる",
+    "reading": "たべる",
+    "meanings": ["to eat"],
+    "part_of_speech": ["ichidan verb", "transitive verb"],
+    "is_common": true
+  },
+  {
+    "word": "今日",
+    "reading": "きょう",
+    "meanings": ["today", "this day"],
+    "part_of_speech": ["noun", "adverb"],
+    "is_common": true
+  },
+  {
+    "word": "橋",
+    "reading": "はし",
+    "meanings": ["bridge"],
+    "part_of_speech": ["noun"],
+    "is_common": true
+  },
+  {
+    "word": "箸",
+    "reading": "はし",
+    "meanings": ["chopsticks"],
+    "part_of_speech": ["noun"],
+    "is_common": true
+  },
+  {
+    "word": "紙",
+    "reading": "かみ",
+    "meanings": ["paper"],
+    "part_of_speech": ["noun"],
+    "is_common": true
+  },
+  {
+    "word": "神",
+    "reading": "かみ",
+    "meanings": ["god", "deity"],
+    "part_of_speech": ["noun"],
+    "is_common": false
+  },
+  {
+    "word": null,
+    "reading": "ありがとう",
+    "meanings": ["thank you", "thanks"],
+    "part_of_speech": ["interjection"],
+    "is_common": true
+  }
+]

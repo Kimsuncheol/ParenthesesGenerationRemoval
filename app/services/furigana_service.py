@@ -15,6 +15,8 @@ _RENDAKU = str.maketrans(
 _HANDAKU = str.maketrans("はひふへほ", "ぱぴぷぺぽ")
 _EMPTY_PARENS_RE = re.compile(r"\(\)")
 _READING_PARENS_RE = re.compile(r"\([^)]*\)")
+_FURIGANA_BRACKET_PAIRS = {"(": ")", "[": "]", "{": "}", "<": ">"}
+_FURIGANA_BOUNDARY_CHARS = set("()[]{}<>")
 
 # Surface-level overrides for known unidic-lite misreadings
 _KANA_EXCEPTIONS: dict[str, str] = {
@@ -138,6 +140,14 @@ def _placeholder_skeleton(annotated: str) -> str:
 def _raw_placeholder_skeleton(surface: str) -> str:
     """Generate the empty-placeholder shape for a surface token."""
     return "".join(f"{char}()" if _is_kanji(char) else char for char in surface)
+
+
+def _furigana_base_start(text: str, bracket_index: int) -> int:
+    """Find the start of the token immediately before a bracketed reading."""
+    start = bracket_index
+    while start > 0 and not text[start - 1].isspace() and text[start - 1] not in _FURIGANA_BOUNDARY_CHARS:
+        start -= 1
+    return start
 
 
 def _align_reading(segments: list[tuple[bool, str]], reading: str) -> str | None:
@@ -321,5 +331,37 @@ def add_furigana(text: str) -> str:
 
     if cursor < len(text):
         result.append(text[cursor:])
+
+    return "".join(result)
+
+
+def remove_furigana(text: str, remove_brackets: bool = True) -> str:
+    """Remove kanji-linked furigana while optionally keeping empty brackets."""
+    result: list[str] = []
+    i = 0
+
+    while i < len(text):
+        char = text[i]
+        closing = _FURIGANA_BRACKET_PAIRS.get(char)
+        if closing is None:
+            result.append(char)
+            i += 1
+            continue
+
+        base_start = _furigana_base_start(text, i)
+        base = text[base_start:i]
+        end = text.find(closing, i + 1)
+        if end == -1 or not any(_is_kanji(c) for c in base):
+            result.append(char)
+            i += 1
+            continue
+
+        if remove_brackets:
+            i = end + 1
+            continue
+
+        result.append(char)
+        result.append(closing)
+        i = end + 1
 
     return "".join(result)
