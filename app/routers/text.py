@@ -73,5 +73,9 @@ def translate_endpoint(body: TranslateRequest) -> TranslateResponse:
 
 @router.post("/vocabulary", response_model=VocabularyLookupResponse)
 def vocabulary_lookup_endpoint(body: VocabularyLookupRequest) -> VocabularyLookupResponse:
-    entry = vocabulary_service.lookup_vocabulary(body.text)
+    try:
+        entry = vocabulary_service.lookup_vocabulary(body.text)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Vocabulary API error: {e}")
+    print(entry)
     return VocabularyLookupResponse(original_text=body.text, entry=entry)

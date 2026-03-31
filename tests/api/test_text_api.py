@@ -1,7 +1,9 @@
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
+import requests
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -10,7 +12,6 @@ from main import app
 from app.services import vocabulary_service
 
 client = TestClient(app)
-VOCABULARY_FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "vocabulary_entries.json"
 
 
 PLACEHOLDER_ONLY_INPUT = """スイッチを入()れる。
@@ -161,15 +162,42 @@ def test_remove_furigana_endpoint_keeps_empty_brackets_when_requested() -> None:
     }
 
 
-@pytest.fixture(autouse=True)
-def use_fixture_dictionary(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(vocabulary_service, "VOCABULARY_DATA_PATH", VOCABULARY_FIXTURE_PATH)
-    vocabulary_service._load_dictionary.cache_clear()
-    yield
-    vocabulary_service._load_dictionary.cache_clear()
+class MockResponse:
+    def __init__(self, payload: Any, status_code: int = 200) -> None:
+        self._payload = payload
+        self.status_code = status_code
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"status={self.status_code}")
+
+    def json(self) -> Any:
+        return self._payload
 
 
-def test_vocabulary_endpoint_returns_best_match() -> None:
+def test_vocabulary_endpoint_returns_best_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        vocabulary_service.requests,
+        "get",
+        lambda url, params, timeout: MockResponse(
+            {
+                "meta": {"status": 200},
+                "data": [
+                    {
+                        "is_common": True,
+                        "japanese": [{"word": "猫", "reading": "ねこ"}],
+                        "senses": [
+                            {
+                                "english_definitions": ["cat"],
+                                "parts_of_speech": ["Noun"],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+    )
+
     response = client.post("/text/vocabulary", json={"text": "猫"})
 
     assert response.status_code == 200
@@ -180,13 +208,19 @@ def test_vocabulary_endpoint_returns_best_match() -> None:
             "reading": "ねこ",
             "romanized": "neko",
             "meanings": ["cat"],
-            "part_of_speech": ["noun"],
+            "part_of_speech": ["Noun"],
             "is_common": True,
         },
     }
 
 
-def test_vocabulary_endpoint_returns_null_entry_for_no_match() -> None:
+def test_vocabulary_endpoint_returns_null_entry_for_no_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        vocabulary_service.requests,
+        "get",
+        lambda url, params, timeout: MockResponse({"meta": {"status": 200}, "data": []}),
+    )
+
     response = client.post("/text/vocabulary", json={"text": "cat"})
 
     assert response.status_code == 200
@@ -200,3 +234,16 @@ def test_vocabulary_endpoint_validates_payload() -> None:
     response = client.post("/text/vocabulary", json={"query": "猫"})
 
     assert response.status_code == 422
+
+
+def test_vocabulary_endpoint_returns_502_for_upstream_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        vocabulary_service.requests,
+        "get",
+        lambda url, params, timeout: MockResponse({}, status_code=503),
+    )
+
+    response = client.post("/text/vocabulary", json={"text": "猫"})
+
+    assert response.status_code == 502
+    assert response.json()["detail"].startswith("Vocabulary API error:")

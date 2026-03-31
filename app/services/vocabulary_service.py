@@ -1,75 +1,50 @@
-import json
 import re
-from dataclasses import dataclass
-from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
-import jaconv
+import requests
 
+from app.core.config import settings
 from app.models.text_models import VocabularyEntry
 from app.services import romanization_service
 
-VOCABULARY_DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "vocabulary_entries.json"
 _MAX_MEANINGS = 5
 _JAPANESE_TEXT_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\u3040-\u30ff\u31f0-\u31ff々ー]")
-
-
-@dataclass(frozen=True)
-class _DictionaryEntry:
-    word: str | None
-    reading: str | None
-    meanings: tuple[str, ...]
-    part_of_speech: tuple[str, ...]
-    is_common: bool
-    normalized_word: str | None
-    normalized_reading: str | None
-    normalized_forms: tuple[str, ...]
+_PLACEHOLDER_PARTS_OF_SPEECH = {"Wikipedia definition", "Other forms", "Notes"}
 
 
 def lookup_vocabulary(text: str) -> VocabularyEntry | None:
     raw_query = text.strip()
-    normalized = _normalize_lookup_text(text)
-    if not normalized or not _contains_japanese(text):
+    if not raw_query or not _contains_japanese(text):
         return None
 
-    candidates: list[tuple[int, int, int, _DictionaryEntry]] = []
-    for entry in _load_dictionary():
-        match_rank = _match_rank(entry, raw_query, normalized)
-        if match_rank == 0:
-            continue
-        candidates.append(
-            (
-                match_rank,
-                int(entry.is_common),
-                -len(entry.meanings),
-                entry,
-            )
-        )
+    response = requests.get(
+        settings.JISHO_API_URL,
+        params={"keyword": raw_query},
+        timeout=settings.JISHO_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
 
-    if not candidates:
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise RuntimeError("Jisho API returned an invalid payload.")
+
+    data = payload.get("data")
+    if not isinstance(data, list):
+        raise RuntimeError("Jisho API payload is missing a valid 'data' list.")
+
+    best_entry = _select_best_entry(data, raw_query)
+    if best_entry is None:
         return None
 
-    best_entry = max(
-        candidates,
-        key=lambda item: (
-            item[0],
-            item[1],
-            item[2],
-            item[3].word or "",
-            item[3].reading or "",
-        ),
-    )[3]
-
-    reading = best_entry.reading
+    word, reading = _extract_primary_japanese(best_entry)
     romanized = romanization_service.romanize_ja(reading) if reading else None
     return VocabularyEntry(
-        word=best_entry.word,
+        word=word,
         reading=reading,
         romanized=romanized,
-        meanings=list(best_entry.meanings[:_MAX_MEANINGS]),
-        part_of_speech=list(best_entry.part_of_speech),
-        is_common=best_entry.is_common,
+        meanings=_extract_meanings(best_entry),
+        part_of_speech=_extract_part_of_speech(best_entry),
+        is_common=bool(best_entry.get("is_common", False)),
     )
 
 
@@ -77,88 +52,79 @@ def _contains_japanese(text: str) -> bool:
     return bool(_JAPANESE_TEXT_RE.search(text))
 
 
-def _match_rank(entry: _DictionaryEntry, raw_text: str, normalized_text: str) -> int:
-    if entry.word and entry.word == raw_text:
-        return 3
-    if entry.reading and entry.reading == raw_text:
-        return 2
-    if normalized_text in entry.normalized_forms:
-        return 1
-    return 0
-
-
-def _normalize_lookup_text(text: str) -> str:
-    normalized = jaconv.normalize(text.strip(), "NFKC")
-    normalized = normalized.replace(" ", "").replace("　", "")
-    return jaconv.kata2hira(normalized)
-
-
-@lru_cache(maxsize=1)
-def _load_dictionary() -> tuple[_DictionaryEntry, ...]:
-    try:
-        with VOCABULARY_DATA_PATH.open("r", encoding="utf-8") as handle:
-            raw_entries = json.load(handle)
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"Vocabulary data file not found: {VOCABULARY_DATA_PATH}") from exc
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Vocabulary data file is invalid JSON: {VOCABULARY_DATA_PATH}") from exc
-
-    if not isinstance(raw_entries, list):
-        raise RuntimeError("Vocabulary data file must contain a top-level list of entries.")
-
-    entries: list[_DictionaryEntry] = []
-    for index, item in enumerate(raw_entries):
-        entries.append(_parse_entry(item, index))
-    return tuple(entries)
-
-
-def _parse_entry(item: Any, index: int) -> _DictionaryEntry:
-    if not isinstance(item, dict):
-        raise RuntimeError(f"Vocabulary entry #{index} must be an object.")
-
-    word = _optional_string(item.get("word"), "word", index)
-    reading = _optional_string(item.get("reading"), "reading", index)
-    if word is None and reading is None:
-        raise RuntimeError(f"Vocabulary entry #{index} must include at least one of word or reading.")
-
-    meanings = _string_list(item.get("meanings"), "meanings", index)
-    part_of_speech = _string_list(item.get("part_of_speech"), "part_of_speech", index)
-    is_common = item.get("is_common", False)
-    if not isinstance(is_common, bool):
-        raise RuntimeError(f"Vocabulary entry #{index} field 'is_common' must be a boolean.")
-
-    normalized_forms = tuple(
-        dict.fromkeys(
-            form
-            for form in (
-                _normalize_lookup_text(word) if word else None,
-                _normalize_lookup_text(reading) if reading else None,
-            )
-            if form
-        )
-    )
-
-    return _DictionaryEntry(
-        word=word,
-        reading=reading,
-        meanings=tuple(dict.fromkeys(meanings)),
-        part_of_speech=tuple(dict.fromkeys(part_of_speech)),
-        is_common=is_common,
-        normalized_word=_normalize_lookup_text(word) if word else None,
-        normalized_reading=_normalize_lookup_text(reading) if reading else None,
-        normalized_forms=normalized_forms,
-    )
-
-
-def _optional_string(value: Any, field_name: str, index: int) -> str | None:
-    if value is None:
+def _select_best_entry(entries: list[Any], raw_query: str) -> dict[str, Any] | None:
+    valid_entries = [entry for entry in entries if isinstance(entry, dict)]
+    if not valid_entries:
         return None
-    if not isinstance(value, str):
-        raise RuntimeError(f"Vocabulary entry #{index} field '{field_name}' must be a string or null.")
-    return value
+
+    for entry in valid_entries:
+        word, _ = _extract_primary_japanese(entry)
+        if word == raw_query:
+            return entry
+
+    for entry in valid_entries:
+        _, reading = _extract_primary_japanese(entry)
+        if reading == raw_query:
+            return entry
+
+    return valid_entries[0]
 
 
-def _string_list(value: Any, field_name: str, index: int) -> list[str]:
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise RuntimeError(f"Vocabulary entry #{index} field '{field_name}' must be a list of strings.")
-    return value
+def _extract_primary_japanese(entry: dict[str, Any]) -> tuple[str | None, str | None]:
+    japanese = entry.get("japanese")
+    if not isinstance(japanese, list) or not japanese:
+        return None, None
+
+    first = japanese[0]
+    if not isinstance(first, dict):
+        return None, None
+
+    word = first.get("word")
+    reading = first.get("reading")
+    return (
+        word if isinstance(word, str) else None,
+        reading if isinstance(reading, str) else None,
+    )
+
+
+def _extract_meanings(entry: dict[str, Any]) -> list[str]:
+    senses = entry.get("senses")
+    if not isinstance(senses, list):
+        raise RuntimeError("Jisho API entry is missing a valid 'senses' list.")
+
+    meanings: list[str] = []
+    for sense in senses:
+        if not isinstance(sense, dict):
+            continue
+        english_definitions = sense.get("english_definitions")
+        if not isinstance(english_definitions, list):
+            continue
+        for definition in english_definitions:
+            if isinstance(definition, str) and definition and definition not in meanings:
+                meanings.append(definition)
+                if len(meanings) >= _MAX_MEANINGS:
+                    return meanings
+    return meanings
+
+
+def _extract_part_of_speech(entry: dict[str, Any]) -> list[str]:
+    senses = entry.get("senses")
+    if not isinstance(senses, list):
+        raise RuntimeError("Jisho API entry is missing a valid 'senses' list.")
+
+    parts_of_speech: list[str] = []
+    for sense in senses:
+        if not isinstance(sense, dict):
+            continue
+        raw_parts = sense.get("parts_of_speech")
+        if not isinstance(raw_parts, list):
+            continue
+        for part in raw_parts:
+            if (
+                isinstance(part, str)
+                and part
+                and part not in _PLACEHOLDER_PARTS_OF_SPEECH
+                and part not in parts_of_speech
+            ):
+                parts_of_speech.append(part)
+    return parts_of_speech
