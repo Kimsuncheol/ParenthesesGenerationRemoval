@@ -247,3 +247,117 @@ def test_vocabulary_endpoint_returns_502_for_upstream_error(monkeypatch: pytest.
 
     assert response.status_code == 502
     assert response.json()["detail"].startswith("Vocabulary API error:")
+
+
+def test_vocabulary_batch_endpoint_returns_mixed_statuses(monkeypatch: pytest.MonkeyPatch) -> None:
+    def mock_get(url: str, params: dict[str, str], timeout: float) -> MockResponse:
+        keyword = params["keyword"]
+        if keyword == "猫":
+            return MockResponse(
+                {
+                    "meta": {"status": 200},
+                    "data": [
+                        {
+                            "is_common": True,
+                            "japanese": [{"word": "猫", "reading": "ねこ"}],
+                            "senses": [
+                                {
+                                    "english_definitions": ["cat"],
+                                    "parts_of_speech": ["Noun"],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )
+        if keyword == "障害":
+            return MockResponse({}, status_code=503)
+        if keyword == "今日":
+            return MockResponse(
+                {
+                    "meta": {"status": 200},
+                    "data": [
+                        {
+                            "is_common": True,
+                            "japanese": [{"word": "今日", "reading": "きょう"}],
+                            "senses": [
+                                {
+                                    "english_definitions": ["today"],
+                                    "parts_of_speech": ["Noun"],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )
+        return MockResponse({"meta": {"status": 200}, "data": []})
+
+    monkeypatch.setattr(vocabulary_service.requests, "get", mock_get)
+
+    response = client.post(
+        "/text/vocabulary/batch",
+        json={"texts": ["猫", "cat", "存在しない単語", "", "障害", "今日"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_texts": ["猫", "cat", "存在しない単語", "", "障害", "今日"],
+        "results": [
+            {
+                "original_text": "猫",
+                "status": "ok",
+                "entry": {
+                    "word": "猫",
+                    "reading": "ねこ",
+                    "romanized": "neko",
+                    "meanings": ["cat"],
+                    "part_of_speech": ["Noun"],
+                    "is_common": True,
+                },
+                "error": None,
+            },
+            {
+                "original_text": "cat",
+                "status": "invalid_input",
+                "entry": None,
+                "error": None,
+            },
+            {
+                "original_text": "存在しない単語",
+                "status": "not_found",
+                "entry": None,
+                "error": None,
+            },
+            {
+                "original_text": "",
+                "status": "invalid_input",
+                "entry": None,
+                "error": None,
+            },
+            {
+                "original_text": "障害",
+                "status": "upstream_error",
+                "entry": None,
+                "error": "status=503",
+            },
+            {
+                "original_text": "今日",
+                "status": "ok",
+                "entry": {
+                    "word": "今日",
+                    "reading": "きょう",
+                    "romanized": "kyou",
+                    "meanings": ["today"],
+                    "part_of_speech": ["Noun"],
+                    "is_common": True,
+                },
+                "error": None,
+            },
+        ],
+    }
+
+
+def test_vocabulary_batch_endpoint_validates_payload_size() -> None:
+    response = client.post("/text/vocabulary/batch", json={"texts": ["猫"] * 21})
+
+    assert response.status_code == 422

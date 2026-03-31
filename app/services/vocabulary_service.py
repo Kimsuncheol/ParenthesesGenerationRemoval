@@ -1,10 +1,11 @@
+from concurrent.futures import ThreadPoolExecutor
 import re
 from typing import Any
 
 import requests
 
 from app.core.config import settings
-from app.models.text_models import VocabularyEntry
+from app.models.text_models import VocabularyBatchLookupItem, VocabularyEntry
 from app.services import romanization_service
 
 _MAX_MEANINGS = 5
@@ -17,6 +18,56 @@ def lookup_vocabulary(text: str) -> VocabularyEntry | None:
     if not raw_query or not _contains_japanese(text):
         return None
 
+    return _lookup_vocabulary_entry(raw_query)
+
+
+def lookup_vocabulary_batch(texts: list[str]) -> list[VocabularyBatchLookupItem]:
+    if not texts:
+        return []
+
+    max_workers = max(1, min(settings.JISHO_BATCH_MAX_CONCURRENCY, len(texts)))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(_lookup_vocabulary_batch_item, text) for text in texts]
+        return [future.result() for future in futures]
+
+
+def _lookup_vocabulary_batch_item(text: str) -> VocabularyBatchLookupItem:
+    raw_query = text.strip()
+    if not raw_query or not _contains_japanese(text):
+        return VocabularyBatchLookupItem(
+            original_text=text,
+            status="invalid_input",
+            entry=None,
+            error=None,
+        )
+
+    try:
+        entry = _lookup_vocabulary_entry(raw_query)
+    except Exception as exc:
+        return VocabularyBatchLookupItem(
+            original_text=text,
+            status="upstream_error",
+            entry=None,
+            error=_format_error(exc),
+        )
+
+    if entry is None:
+        return VocabularyBatchLookupItem(
+            original_text=text,
+            status="not_found",
+            entry=None,
+            error=None,
+        )
+
+    return VocabularyBatchLookupItem(
+        original_text=text,
+        status="ok",
+        entry=entry,
+        error=None,
+    )
+
+
+def _lookup_vocabulary_entry(raw_query: str) -> VocabularyEntry | None:
     response = requests.get(
         settings.JISHO_API_URL,
         params={"keyword": raw_query},
@@ -46,6 +97,11 @@ def lookup_vocabulary(text: str) -> VocabularyEntry | None:
         part_of_speech=_extract_part_of_speech(best_entry),
         is_common=bool(best_entry.get("is_common", False)),
     )
+
+
+def _format_error(exc: Exception) -> str:
+    message = str(exc).strip()
+    return message or exc.__class__.__name__
 
 
 def _contains_japanese(text: str) -> bool:

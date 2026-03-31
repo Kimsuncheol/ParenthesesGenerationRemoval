@@ -13,6 +13,8 @@ from app.models.text_models import (
     RomanizeResponse,
     TranslateRequest,
     TranslateResponse,
+    VocabularyBatchLookupRequest,
+    VocabularyBatchLookupResponse,
     VocabularyLookupRequest,
     VocabularyLookupResponse,
 )
@@ -79,3 +81,10 @@ def vocabulary_lookup_endpoint(body: VocabularyLookupRequest) -> VocabularyLooku
         raise HTTPException(status_code=502, detail=f"Vocabulary API error: {e}")
     print(entry)
     return VocabularyLookupResponse(original_text=body.text, entry=entry)
+
+
+@router.post("/vocabulary/batch", response_model=VocabularyBatchLookupResponse)
+def vocabulary_batch_lookup_endpoint(body: VocabularyBatchLookupRequest) -> VocabularyBatchLookupResponse:
+    results = vocabulary_service.lookup_vocabulary_batch(body.texts)
+    print(results)
+    return VocabularyBatchLookupResponse(original_texts=body.texts, results=results)

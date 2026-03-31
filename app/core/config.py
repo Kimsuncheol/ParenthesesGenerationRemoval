@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     NAVER_CLIENT_SECRET: str = ""
     JISHO_API_URL: str = "https://jisho.org/api/v1/search/words"
     JISHO_TIMEOUT_SECONDS: float = 5.0
+    JISHO_BATCH_MAX_ITEMS: int = 20
+    JISHO_BATCH_MAX_CONCURRENCY: int = 4
 
     model_config = {"env_file": ".env"}
 
