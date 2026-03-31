@@ -41,6 +41,7 @@ def romanize_endpoint(body: RomanizeRequest) -> RomanizeResponse:
 @router.post("/add-furigana", response_model=AddFuriganaResponse)
 def add_furigana_endpoint(body: AddFuriganaRequest) -> AddFuriganaResponse:
     result = furigana_service.add_furigana(body.text)
+    print(result);
     return AddFuriganaResponse(original_text=body.text, result_text=result)
 
 
