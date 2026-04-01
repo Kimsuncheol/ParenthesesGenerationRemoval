@@ -23,6 +23,9 @@ _KANA_EXCEPTIONS: dict[str, str] = {
     "丸い": "まるい",
     "温く": "ぬるく",
 }
+_STANDALONE_KANA_EXCEPTIONS: dict[str, str] = {
+    "市場": "いちば",
+}
 _HIRAGANA_ONLY_EXCEPTIONS: dict[str, str] = {
     "日本": "にほん",
 }
@@ -68,6 +71,29 @@ def _reading_variants(hint: str) -> list[str]:
         if candidate and candidate not in variants:
             variants.append(candidate)
     return variants
+
+
+def _has_kanji_neighbor(text: str, start: int, end: int) -> bool:
+    prev_char = text[start - 1] if start > 0 else ""
+    next_char = text[end] if end < len(text) else ""
+    return (_is_kanji(prev_char) if prev_char else False) or (_is_kanji(next_char) if next_char else False)
+
+
+def _exception_reading(
+    surface: str,
+    source_text: str,
+    start: int,
+    end: int,
+    *,
+    hiragana_only: bool,
+) -> str | None:
+    if hiragana_only and surface in _HIRAGANA_ONLY_EXCEPTIONS and not _has_kanji_neighbor(source_text, start, end):
+        return _HIRAGANA_ONLY_EXCEPTIONS[surface]
+
+    if surface in _STANDALONE_KANA_EXCEPTIONS and not _has_kanji_neighbor(source_text, start, end):
+        return _STANDALONE_KANA_EXCEPTIONS[surface]
+
+    return _KANA_EXCEPTIONS.get(surface)
 
 
 def _split_kanji_reading(chars: list[str], reading: str) -> list[str] | None:
@@ -306,7 +332,13 @@ def _add_furigana_annotations(text: str) -> str:
             source_cursor = token_end
             continue
 
-        hira = _KANA_EXCEPTIONS.get(surface) or jaconv.kata2hira(kana)
+        hira = _exception_reading(
+            surface,
+            source_text,
+            source_cursor,
+            token_end,
+            hiragana_only=False,
+        ) or jaconv.kata2hira(kana)
         annotated = _annotate_token(surface, hira)
         placeholder_skeleton = _placeholder_skeleton(annotated)
         raw_placeholder = _raw_placeholder_skeleton(surface)
@@ -379,7 +411,13 @@ def _to_hiragana_only(text: str) -> str:
             source_cursor = token_end
             continue
 
-        hira = _HIRAGANA_ONLY_EXCEPTIONS.get(surface) or _KANA_EXCEPTIONS.get(surface) or jaconv.kata2hira(kana)
+        hira = _exception_reading(
+            surface,
+            source_text,
+            source_cursor,
+            token_end,
+            hiragana_only=True,
+        ) or jaconv.kata2hira(kana)
         result.append(hira)
         source_cursor = token_end
 

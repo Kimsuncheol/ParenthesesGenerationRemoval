@@ -148,6 +148,19 @@ def test_add_furigana_endpoint_returns_hiragana_only_when_requested() -> None:
     }
 
 
+def test_add_furigana_endpoint_returns_market_override_in_hiragana_only_mode() -> None:
+    response = client.post(
+        "/text/add-furigana",
+        json={"text": "市場へ行く。", "mode": "hiragana_only"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "市場へ行く。",
+        "result_text": "いちばへいく。",
+    }
+
+
 def test_add_furigana_endpoint_validates_mode() -> None:
     response = client.post(
         "/text/add-furigana",
