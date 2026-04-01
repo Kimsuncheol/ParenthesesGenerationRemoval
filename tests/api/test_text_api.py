@@ -170,6 +170,58 @@ def test_add_furigana_endpoint_validates_mode() -> None:
     assert response.status_code == 422
 
 
+def test_add_furigana_batch_endpoint_returns_ordered_results() -> None:
+    response = client.post(
+        "/text/add-furigana/batch",
+        json={"texts": ["旅行", "市場", "旅行(りょこう)", ""]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_texts": ["旅行", "市場", "旅行(りょこう)", ""],
+        "results": [
+            {"original_text": "旅行", "result_text": "旅(りょ)行(こう)"},
+            {"original_text": "市場", "result_text": "市(いち)場(ば)"},
+            {"original_text": "旅行(りょこう)", "result_text": "旅(りょ)行(こう)"},
+            {"original_text": "", "result_text": ""},
+        ],
+    }
+
+
+def test_add_furigana_batch_endpoint_returns_hiragana_only_results() -> None:
+    response = client.post(
+        "/text/add-furigana/batch",
+        json={"texts": ["日本", "市場へ行く。", "スーパー", "ABC123", ""], "mode": "hiragana_only"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_texts": ["日本", "市場へ行く。", "スーパー", "ABC123", ""],
+        "results": [
+            {"original_text": "日本", "result_text": "にほん"},
+            {"original_text": "市場へ行く。", "result_text": "いちばへいく。"},
+            {"original_text": "スーパー", "result_text": "すーぱー"},
+            {"original_text": "ABC123", "result_text": "ABC123"},
+            {"original_text": "", "result_text": ""},
+        ],
+    }
+
+
+def test_add_furigana_batch_endpoint_validates_payload_size() -> None:
+    response = client.post("/text/add-furigana/batch", json={"texts": ["日本"] * 21})
+
+    assert response.status_code == 422
+
+
+def test_add_furigana_batch_endpoint_validates_mode() -> None:
+    response = client.post(
+        "/text/add-furigana/batch",
+        json={"texts": ["日本"], "mode": "invalid"},
+    )
+
+    assert response.status_code == 422
+
+
 def test_remove_furigana_endpoint_removes_brackets_by_default() -> None:
     text = "日本(にほん)へ行く"
 
@@ -330,3 +382,4 @@ def test_openapi_does_not_include_single_vocabulary_path() -> None:
 
     assert "/text/vocabulary" not in schema["paths"]
     assert "/text/vocabulary/batch" in schema["paths"]
+    assert "/text/add-furigana/batch" in schema["paths"]

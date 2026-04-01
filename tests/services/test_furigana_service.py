@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.furigana_service import add_furigana
+from app.services.furigana_service import add_furigana, add_furigana_batch
 
 
 PLAIN_CASES = [
@@ -108,3 +108,21 @@ def test_add_furigana(text: str, expected: str) -> None:
 @pytest.mark.parametrize(("text", "expected"), HIRAGANA_ONLY_CASES)
 def test_add_furigana_hiragana_only(text: str, expected: str) -> None:
     assert add_furigana(text, mode="hiragana_only") == expected
+
+
+def test_add_furigana_batch_preserves_order_and_matches_single_item_results() -> None:
+    texts = ["旅行", "市場", "旅行(りょこう)", ""]
+
+    results = add_furigana_batch(texts)
+
+    assert [item.original_text for item in results] == texts
+    assert [item.result_text for item in results] == [add_furigana(text) for text in texts]
+
+
+def test_add_furigana_batch_hiragana_only_matches_single_item_results() -> None:
+    texts = ["日本", "市場へ行く。", "スーパー", "ABC123", ""]
+
+    results = add_furigana_batch(texts, mode="hiragana_only")
+
+    assert [item.original_text for item in results] == texts
+    assert [item.result_text for item in results] == [add_furigana(text, mode="hiragana_only") for text in texts]

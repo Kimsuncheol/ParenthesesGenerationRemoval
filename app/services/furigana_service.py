@@ -4,6 +4,8 @@ import jaconv
 import pykakasi
 import cutlet
 
+from app.models.text_models import AddFuriganaBatchItem
+
 _kks = pykakasi.kakasi()
 _katsu = cutlet.Cutlet(use_foreign_spelling=False)
 
@@ -431,6 +433,19 @@ def add_furigana(text: str, mode: str = "furigana") -> str:
     if mode == "hiragana_only":
         return _to_hiragana_only(text)
     return _add_furigana_annotations(text)
+
+
+def add_furigana_batch(
+    texts: list[str],
+    mode: str = "furigana",
+) -> list[AddFuriganaBatchItem]:
+    return [
+        AddFuriganaBatchItem(
+            original_text=text,
+            result_text=add_furigana(text, mode=mode),
+        )
+        for text in texts
+    ]
 
 
 def remove_furigana(text: str, remove_brackets: bool = True) -> str:

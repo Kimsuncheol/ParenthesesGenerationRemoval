@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException
 
 from app.models.text_models import (
+    AddFuriganaBatchRequest,
+    AddFuriganaBatchResponse,
     AddFuriganaRequest,
     AddFuriganaResponse,
     GenerateParenthesesRequest,
@@ -60,6 +62,13 @@ def add_furigana_endpoint(body: AddFuriganaRequest) -> AddFuriganaResponse:
     result = furigana_service.add_furigana(body.text, mode=body.mode)
     print(result)
     return AddFuriganaResponse(original_text=body.text, result_text=result)
+
+
+@router.post("/add-furigana/batch", response_model=AddFuriganaBatchResponse)
+def add_furigana_batch_endpoint(body: AddFuriganaBatchRequest) -> AddFuriganaBatchResponse:
+    results = furigana_service.add_furigana_batch(body.texts, mode=body.mode)
+    print(results)
+    return AddFuriganaBatchResponse(original_texts=body.texts, results=results)
 
 
 @router.post("/translate", response_model=TranslateResponse)

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     JISHO_TIMEOUT_SECONDS: float = 5.0
     JISHO_BATCH_MAX_ITEMS: int = 20
     JISHO_BATCH_MAX_CONCURRENCY: int = 4
+    FURIGANA_BATCH_MAX_ITEMS: int = 20
 
     model_config = {"env_file": ".env"}
 

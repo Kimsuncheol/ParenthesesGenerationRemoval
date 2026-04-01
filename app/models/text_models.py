@@ -84,3 +84,18 @@ class AddFuriganaRequest(BaseModel):
 class AddFuriganaResponse(BaseModel):
     original_text: str
     result_text: str
+
+
+class AddFuriganaBatchRequest(BaseModel):
+    texts: list[str] = Field(min_length=1, max_length=settings.FURIGANA_BATCH_MAX_ITEMS)
+    mode: Literal["furigana", "hiragana_only"] = "furigana"
+
+
+class AddFuriganaBatchItem(BaseModel):
+    original_text: str
+    result_text: str
+
+
+class AddFuriganaBatchResponse(BaseModel):
+    original_texts: list[str]
+    results: list[AddFuriganaBatchItem]
