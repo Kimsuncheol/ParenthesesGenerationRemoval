@@ -135,6 +135,28 @@ def test_add_furigana_endpoint_fills_mixed_block() -> None:
     }
 
 
+def test_add_furigana_endpoint_returns_hiragana_only_when_requested() -> None:
+    response = client.post(
+        "/text/add-furigana",
+        json={"text": "日本(にほん)へスーパーで行く。", "mode": "hiragana_only"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "日本(にほん)へスーパーで行く。",
+        "result_text": "にほんへすーぱーでいく。",
+    }
+
+
+def test_add_furigana_endpoint_validates_mode() -> None:
+    response = client.post(
+        "/text/add-furigana",
+        json={"text": "日本", "mode": "invalid"},
+    )
+
+    assert response.status_code == 422
+
+
 def test_remove_furigana_endpoint_removes_brackets_by_default() -> None:
     text = "日本(にほん)へ行く"
 

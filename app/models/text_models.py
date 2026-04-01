@@ -78,6 +78,7 @@ class VocabularyBatchLookupResponse(BaseModel):
 
 class AddFuriganaRequest(BaseModel):
     text: str
+    mode: Literal["furigana", "hiragana_only"] = "furigana"
 
 
 class AddFuriganaResponse(BaseModel):

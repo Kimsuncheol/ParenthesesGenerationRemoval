@@ -23,6 +23,9 @@ _KANA_EXCEPTIONS: dict[str, str] = {
     "丸い": "まるい",
     "温く": "ぬるく",
 }
+_HIRAGANA_ONLY_EXCEPTIONS: dict[str, str] = {
+    "日本": "にほん",
+}
 
 
 def _is_kanji(char: str) -> bool:
@@ -254,7 +257,18 @@ def _annotate_token(surface: str, hira: str) -> str:
     return prefix + annotated + suffix
 
 
-def add_furigana(text: str) -> str:
+def _normalize_non_kanji_text(text: str) -> str:
+    """Convert katakana to hiragana while leaving other characters unchanged."""
+    return jaconv.kata2hira(text)
+
+
+def _normalize_hiragana_source_text(text: str) -> str:
+    """Strip placeholders and attached furigana while keeping unrelated brackets."""
+    source_text = _EMPTY_PARENS_RE.sub("", text)
+    return remove_furigana(source_text, remove_brackets=True)
+
+
+def _add_furigana_annotations(text: str) -> str:
     """Annotate each kanji in `text` with its hiragana reading in parentheses.
 
     Kanji that are already followed by a parenthesised reading in the input
@@ -333,6 +347,52 @@ def add_furigana(text: str) -> str:
         result.append(text[cursor:])
 
     return "".join(result)
+
+
+def _to_hiragana_only(text: str) -> str:
+    """Convert Japanese text to plain hiragana while preserving non-Japanese text."""
+    source_text = _normalize_hiragana_source_text(text)
+    result: list[str] = []
+    source_cursor = 0
+
+    for token in _katsu.tagger(source_text):
+        surface: str = token.surface
+        ws: str = token.white_space
+        if ws and source_text.startswith(ws, source_cursor):
+            result.append(ws)
+            source_cursor += len(ws)
+
+        if not source_text.startswith(surface, source_cursor):
+            continue
+
+        token_end = source_cursor + len(surface)
+        has_kanji = any(_is_kanji(c) for c in surface)
+
+        if not has_kanji:
+            result.append(_normalize_non_kanji_text(surface))
+            source_cursor = token_end
+            continue
+
+        kana = getattr(token.feature, "kana", None)
+        if token.is_unk or not kana:
+            result.append(surface)
+            source_cursor = token_end
+            continue
+
+        hira = _HIRAGANA_ONLY_EXCEPTIONS.get(surface) or _KANA_EXCEPTIONS.get(surface) or jaconv.kata2hira(kana)
+        result.append(hira)
+        source_cursor = token_end
+
+    if source_cursor < len(source_text):
+        result.append(_normalize_non_kanji_text(source_text[source_cursor:]))
+
+    return "".join(result)
+
+
+def add_furigana(text: str, mode: str = "furigana") -> str:
+    if mode == "hiragana_only":
+        return _to_hiragana_only(text)
+    return _add_furigana_annotations(text)
 
 
 def remove_furigana(text: str, remove_brackets: bool = True) -> str:

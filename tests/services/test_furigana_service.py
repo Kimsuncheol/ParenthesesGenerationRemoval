@@ -83,6 +83,16 @@ NEW_PLACEHOLDER_CASES = [
     ("ステーキを焼()く。", "ステーキを焼(や)く。"),
 ]
 
+HIRAGANA_ONLY_CASES = [
+    ("日本", "にほん"),
+    ("日本へ行く。", "にほんへいく。"),
+    ("スーパー", "すーぱー"),
+    ("ABC日本123", "ABCにほん123"),
+    ("日本(にほん)", "にほん"),
+    ("日()本()", "にほん"),
+    ("note (test)", "note (test)"),
+]
+
 
 @pytest.mark.parametrize(
     ("text", "expected"),
@@ -90,3 +100,8 @@ NEW_PLACEHOLDER_CASES = [
 )
 def test_add_furigana(text: str, expected: str) -> None:
     assert add_furigana(text) == expected
+
+
+@pytest.mark.parametrize(("text", "expected"), HIRAGANA_ONLY_CASES)
+def test_add_furigana_hiragana_only(text: str, expected: str) -> None:
+    assert add_furigana(text, mode="hiragana_only") == expected
