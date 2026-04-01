@@ -15,8 +15,6 @@ from app.models.text_models import (
     TranslateResponse,
     VocabularyBatchLookupRequest,
     VocabularyBatchLookupResponse,
-    VocabularyLookupRequest,
-    VocabularyLookupResponse,
 )
 from app.services import (
     furigana_service,
@@ -71,16 +69,6 @@ def translate_endpoint(body: TranslateRequest) -> TranslateResponse:
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Translation API error: {e}")
     return TranslateResponse(original_text=body.text, translated_text=translated)
-
-
-@router.post("/vocabulary", response_model=VocabularyLookupResponse)
-def vocabulary_lookup_endpoint(body: VocabularyLookupRequest) -> VocabularyLookupResponse:
-    try:
-        entry = vocabulary_service.lookup_vocabulary(body.text)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Vocabulary API error: {e}")
-    print(entry)
-    return VocabularyLookupResponse(original_text=body.text, entry=entry)
 
 
 @router.post("/vocabulary/batch", response_model=VocabularyBatchLookupResponse)

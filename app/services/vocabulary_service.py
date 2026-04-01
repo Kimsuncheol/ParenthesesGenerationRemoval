@@ -13,14 +13,6 @@ _JAPANESE_TEXT_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\u3040-\u30ff\u31f0-
 _PLACEHOLDER_PARTS_OF_SPEECH = {"Wikipedia definition", "Other forms", "Notes"}
 
 
-def lookup_vocabulary(text: str) -> VocabularyEntry | None:
-    raw_query = text.strip()
-    if not raw_query or not _contains_japanese(text):
-        return None
-
-    return _lookup_vocabulary_entry(raw_query)
-
-
 def lookup_vocabulary_batch(texts: list[str]) -> list[VocabularyBatchLookupItem]:
     if not texts:
         return []

@@ -60,15 +60,6 @@ class VocabularyEntry(BaseModel):
     is_common: bool
 
 
-class VocabularyLookupRequest(BaseModel):
-    text: str
-
-
-class VocabularyLookupResponse(BaseModel):
-    original_text: str
-    entry: VocabularyEntry | None
-
-
 class VocabularyBatchLookupRequest(BaseModel):
     texts: list[str] = Field(min_length=1, max_length=settings.JISHO_BATCH_MAX_ITEMS)
 

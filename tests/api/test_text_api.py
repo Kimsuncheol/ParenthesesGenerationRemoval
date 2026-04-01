@@ -175,80 +175,6 @@ class MockResponse:
         return self._payload
 
 
-def test_vocabulary_endpoint_returns_best_match(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        vocabulary_service.requests,
-        "get",
-        lambda url, params, timeout: MockResponse(
-            {
-                "meta": {"status": 200},
-                "data": [
-                    {
-                        "is_common": True,
-                        "japanese": [{"word": "猫", "reading": "ねこ"}],
-                        "senses": [
-                            {
-                                "english_definitions": ["cat"],
-                                "parts_of_speech": ["Noun"],
-                            }
-                        ],
-                    }
-                ],
-            }
-        ),
-    )
-
-    response = client.post("/text/vocabulary", json={"text": "猫"})
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "original_text": "猫",
-        "entry": {
-            "word": "猫",
-            "reading": "ねこ",
-            "romanized": "neko",
-            "meanings": ["cat"],
-            "part_of_speech": ["Noun"],
-            "is_common": True,
-        },
-    }
-
-
-def test_vocabulary_endpoint_returns_null_entry_for_no_match(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        vocabulary_service.requests,
-        "get",
-        lambda url, params, timeout: MockResponse({"meta": {"status": 200}, "data": []}),
-    )
-
-    response = client.post("/text/vocabulary", json={"text": "cat"})
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "original_text": "cat",
-        "entry": None,
-    }
-
-
-def test_vocabulary_endpoint_validates_payload() -> None:
-    response = client.post("/text/vocabulary", json={"query": "猫"})
-
-    assert response.status_code == 422
-
-
-def test_vocabulary_endpoint_returns_502_for_upstream_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        vocabulary_service.requests,
-        "get",
-        lambda url, params, timeout: MockResponse({}, status_code=503),
-    )
-
-    response = client.post("/text/vocabulary", json={"text": "猫"})
-
-    assert response.status_code == 502
-    assert response.json()["detail"].startswith("Vocabulary API error:")
-
-
 def test_vocabulary_batch_endpoint_returns_mixed_statuses(monkeypatch: pytest.MonkeyPatch) -> None:
     def mock_get(url: str, params: dict[str, str], timeout: float) -> MockResponse:
         keyword = params["keyword"]
@@ -361,3 +287,11 @@ def test_vocabulary_batch_endpoint_validates_payload_size() -> None:
     response = client.post("/text/vocabulary/batch", json={"texts": ["猫"] * 21})
 
     assert response.status_code == 422
+
+
+def test_openapi_does_not_include_single_vocabulary_path() -> None:
+    app.openapi_schema = None
+    schema = app.openapi()
+
+    assert "/text/vocabulary" not in schema["paths"]
+    assert "/text/vocabulary/batch" in schema["paths"]
