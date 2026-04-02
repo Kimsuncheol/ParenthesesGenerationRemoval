@@ -386,13 +386,16 @@ def test_openapi_does_not_include_single_vocabulary_path() -> None:
 
 
 def test_manga_generate_panels_endpoint_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    descriptions = ["A samurai stands at a village gate.", "Rain falls on the empty street."]
+    descriptions = [
+        "[WIDE] A samurai stands at a village gate.",
+        "[MEDIUM] Rain falls on the empty street.",
+    ]
     image_urls = ["https://example.com/img_0.png", "https://example.com/img_1.png"]
 
     monkeypatch.setattr(
         manga_service,
         "generate_manga_panels",
-        lambda prompt, panel_count: (descriptions, image_urls),
+        lambda prompt, panel_count, character_description=None: (descriptions, image_urls),
     )
 
     response = client.post(
@@ -408,11 +411,51 @@ def test_manga_generate_panels_endpoint_success(monkeypatch: pytest.MonkeyPatch)
     assert body["image_urls"] == image_urls
 
 
+def test_manga_generate_panels_endpoint_passes_character_description(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    def mock_generate(prompt: str, panel_count: int, character_description: str | None = None) -> tuple:
+        captured["character_description"] = character_description
+        return (["[WIDE] Panel one.", "[MEDIUM] Panel two."], ["https://example.com/0.png", "https://example.com/1.png"])
+
+    monkeypatch.setattr(manga_service, "generate_manga_panels", mock_generate)
+
+    response = client.post(
+        "/text/manga/generate-panels",
+        json={
+            "prompt": "A samurai walks through a rainy village",
+            "panel_count": 2,
+            "character_description": "tall samurai, black hair, traditional kimono",
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["character_description"] == "tall samurai, black hair, traditional kimono"
+
+
+def test_manga_generate_panels_endpoint_character_description_optional(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    def mock_generate(prompt: str, panel_count: int, character_description: str | None = None) -> tuple:
+        captured["character_description"] = character_description
+        return (["[WIDE] Panel one."], ["https://example.com/0.png"])
+
+    monkeypatch.setattr(manga_service, "generate_manga_panels", mock_generate)
+
+    response = client.post(
+        "/text/manga/generate-panels",
+        json={"prompt": "A scene", "panel_count": 1},
+    )
+
+    assert response.status_code == 200
+    assert captured["character_description"] is None
+
+
 def test_manga_generate_panels_endpoint_validates_panel_count(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         manga_service,
         "generate_manga_panels",
-        lambda prompt, panel_count: ([], []),
+        lambda prompt, panel_count, character_description=None: ([], []),
     )
 
     assert client.post("/text/manga/generate-panels", json={"prompt": "A scene", "panel_count": 0}).status_code == 422
@@ -423,14 +466,14 @@ def test_manga_generate_panels_endpoint_validates_empty_prompt(monkeypatch: pyte
     monkeypatch.setattr(
         manga_service,
         "generate_manga_panels",
-        lambda prompt, panel_count: ([], []),
+        lambda prompt, panel_count, character_description=None: ([], []),
     )
 
     assert client.post("/text/manga/generate-panels", json={"prompt": "", "panel_count": 2}).status_code == 422
 
 
 def test_manga_generate_panels_endpoint_returns_502_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    def raise_error(prompt: str, panel_count: int) -> None:
+    def raise_error(prompt: str, panel_count: int, character_description: str | None = None) -> None:
         raise Exception("OpenAI unavailable")
 
     monkeypatch.setattr(manga_service, "generate_manga_panels", raise_error)

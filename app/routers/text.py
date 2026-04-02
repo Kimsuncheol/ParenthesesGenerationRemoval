@@ -93,7 +93,9 @@ def vocabulary_batch_lookup_endpoint(body: VocabularyBatchLookupRequest) -> Voca
 @router.post("/manga/generate-panels", response_model=MangaPanelGenerationResponse)
 def manga_generate_panels_endpoint(body: MangaPanelGenerationRequest) -> MangaPanelGenerationResponse:
     try:
-        descriptions, image_urls = manga_service.generate_manga_panels(body.prompt, body.panel_count)
+        descriptions, image_urls = manga_service.generate_manga_panels(
+            body.prompt, body.panel_count, body.character_description
+        )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Manga generation error: {e}")
     return MangaPanelGenerationResponse(

@@ -104,6 +104,7 @@ class AddFuriganaBatchResponse(BaseModel):
 class MangaPanelGenerationRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=500)
     panel_count: int = Field(ge=1, le=settings.MANGA_MAX_PANELS)
+    character_description: str | None = None
 
 
 class MangaPanelGenerationResponse(BaseModel):

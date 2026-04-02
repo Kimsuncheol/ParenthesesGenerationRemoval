@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     MANGA_GPT_MODEL: str = "gpt-4o"
     MANGA_DALLE_MODEL: str = "dall-e-3"
     MANGA_MAX_PANELS: int = 6
+    MANGA_STYLE_PREFIX: str = (
+        "manga panel, black and white, high-contrast ink, screentone shading, "
+        "bold outlines, G-pen line weight variation, professional manga style, "
+        "avoid color, avoid western comic style, avoid chibi, avoid speech bubbles"
+    )
 
     model_config = {"env_file": ".env"}
 
