@@ -7,6 +7,8 @@ from app.models.text_models import (
     AddFuriganaResponse,
     GenerateParenthesesRequest,
     GenerateParenthesesResponse,
+    MangaPanelGenerationRequest,
+    MangaPanelGenerationResponse,
     RemoveFuriganaRequest,
     RemoveFuriganaResponse,
     RemoveParenthesesRequest,
@@ -20,6 +22,7 @@ from app.models.text_models import (
 )
 from app.services import (
     furigana_service,
+    manga_service,
     parentheses_service,
     romanization_service,
     translation_service,
@@ -85,3 +88,17 @@ def vocabulary_batch_lookup_endpoint(body: VocabularyBatchLookupRequest) -> Voca
     results = vocabulary_service.lookup_vocabulary_batch(body.texts)
     print(results)
     return VocabularyBatchLookupResponse(original_texts=body.texts, results=results)
+
+
+@router.post("/manga/generate-panels", response_model=MangaPanelGenerationResponse)
+def manga_generate_panels_endpoint(body: MangaPanelGenerationRequest) -> MangaPanelGenerationResponse:
+    try:
+        descriptions, image_urls = manga_service.generate_manga_panels(body.prompt, body.panel_count)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Manga generation error: {e}")
+    return MangaPanelGenerationResponse(
+        prompt=body.prompt,
+        panel_count=body.panel_count,
+        panel_descriptions=descriptions,
+        image_urls=image_urls,
+    )

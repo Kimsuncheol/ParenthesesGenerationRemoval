@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from main import app
-from app.services import vocabulary_service
+from app.services import manga_service, vocabulary_service
 
 client = TestClient(app)
 
@@ -383,3 +383,69 @@ def test_openapi_does_not_include_single_vocabulary_path() -> None:
     assert "/text/vocabulary" not in schema["paths"]
     assert "/text/vocabulary/batch" in schema["paths"]
     assert "/text/add-furigana/batch" in schema["paths"]
+
+
+def test_manga_generate_panels_endpoint_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    descriptions = ["A samurai stands at a village gate.", "Rain falls on the empty street."]
+    image_urls = ["https://example.com/img_0.png", "https://example.com/img_1.png"]
+
+    monkeypatch.setattr(
+        manga_service,
+        "generate_manga_panels",
+        lambda prompt, panel_count: (descriptions, image_urls),
+    )
+
+    response = client.post(
+        "/text/manga/generate-panels",
+        json={"prompt": "A samurai walks through a rainy village", "panel_count": 2},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["prompt"] == "A samurai walks through a rainy village"
+    assert body["panel_count"] == 2
+    assert body["panel_descriptions"] == descriptions
+    assert body["image_urls"] == image_urls
+
+
+def test_manga_generate_panels_endpoint_validates_panel_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        manga_service,
+        "generate_manga_panels",
+        lambda prompt, panel_count: ([], []),
+    )
+
+    assert client.post("/text/manga/generate-panels", json={"prompt": "A scene", "panel_count": 0}).status_code == 422
+    assert client.post("/text/manga/generate-panels", json={"prompt": "A scene", "panel_count": 7}).status_code == 422
+
+
+def test_manga_generate_panels_endpoint_validates_empty_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        manga_service,
+        "generate_manga_panels",
+        lambda prompt, panel_count: ([], []),
+    )
+
+    assert client.post("/text/manga/generate-panels", json={"prompt": "", "panel_count": 2}).status_code == 422
+
+
+def test_manga_generate_panels_endpoint_returns_502_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def raise_error(prompt: str, panel_count: int) -> None:
+        raise Exception("OpenAI unavailable")
+
+    monkeypatch.setattr(manga_service, "generate_manga_panels", raise_error)
+
+    response = client.post(
+        "/text/manga/generate-panels",
+        json={"prompt": "A scene", "panel_count": 2},
+    )
+
+    assert response.status_code == 502
+    assert "OpenAI unavailable" in response.json()["detail"]
+
+
+def test_openapi_includes_manga_path() -> None:
+    app.openapi_schema = None
+    schema = app.openapi()
+
+    assert "/text/manga/generate-panels" in schema["paths"]

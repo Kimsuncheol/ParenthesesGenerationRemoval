@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     JISHO_BATCH_MAX_CONCURRENCY: int = 4
     FURIGANA_BATCH_MAX_ITEMS: int = 20
 
+    OPENAI_API_KEY: str = ""
+    MANGA_GPT_MODEL: str = "gpt-4o"
+    MANGA_DALLE_MODEL: str = "dall-e-3"
+    MANGA_MAX_PANELS: int = 6
+
     model_config = {"env_file": ".env"}
 
 

@@ -99,3 +99,15 @@ class AddFuriganaBatchItem(BaseModel):
 class AddFuriganaBatchResponse(BaseModel):
     original_texts: list[str]
     results: list[AddFuriganaBatchItem]
+
+
+class MangaPanelGenerationRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=500)
+    panel_count: int = Field(ge=1, le=settings.MANGA_MAX_PANELS)
+
+
+class MangaPanelGenerationResponse(BaseModel):
+    prompt: str
+    panel_count: int
+    panel_descriptions: list[str]
+    image_urls: list[str]
