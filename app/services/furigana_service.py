@@ -1,4 +1,5 @@
 import re
+import functools
 
 import jaconv
 import pykakasi
@@ -56,12 +57,14 @@ def _is_kanji(char: str) -> bool:
     return 0x4E00 <= cp <= 0x9FFF or 0x3400 <= cp <= 0x4DBF
 
 
+@functools.lru_cache(maxsize=2048)
 def _pykakasi_hira(char: str) -> str:
     """Return pykakasi's hiragana reading for a single character."""
     result = _kks.convert(char)
     return result[0]["hira"] if result else char
 
 
+@functools.lru_cache(maxsize=2048)
 def _single_char_hira(char: str) -> str | None:
     """Return a single-character reading from MeCab when available."""
     tokens = _katsu.tagger(char)
@@ -75,22 +78,24 @@ def _single_char_hira(char: str) -> str | None:
     return jaconv.kata2hira(kana)
 
 
-def _reading_hints(char: str) -> list[str]:
+@functools.lru_cache(maxsize=2048)
+def _reading_hints(char: str) -> tuple[str, ...]:
     """Collect likely readings for a single character."""
     hints: list[str] = []
     for candidate in (_single_char_hira(char), _pykakasi_hira(char)):
         if candidate and candidate not in hints:
             hints.append(candidate)
-    return hints
+    return tuple(hints)
 
 
-def _reading_variants(hint: str) -> list[str]:
+@functools.lru_cache(maxsize=512)
+def _reading_variants(hint: str) -> tuple[str, ...]:
     """Expand a base hint with voiced and semi-voiced variants."""
     variants: list[str] = []
     for candidate in (hint, hint.translate(_RENDAKU), hint.translate(_HANDAKU)):
         if candidate and candidate not in variants:
             variants.append(candidate)
-    return variants
+    return tuple(variants)
 
 
 def _has_kanji_neighbor(text: str, start: int, end: int) -> bool:

@@ -23,7 +23,8 @@
       "Bash(python -m pytest tests/ -x -q)",
       "Bash(python -m pytest tests/services/ -x -q)",
       "Bash(python -m pytest tests/services/test_furigana_service.py tests/services/test_remove_furigana_service.py -v)",
-      "Bash(python -m pytest tests/services/test_furigana_service.py tests/services/test_remove_furigana_service.py -v --tb=short)"
+      "Bash(python -m pytest tests/services/test_furigana_service.py tests/services/test_remove_furigana_service.py -v --tb=short)",
+      "Bash(python -m pytest tests/services/test_furigana_service.py tests/services/test_remove_furigana_service.py -q)"
     ]
   }
 }
