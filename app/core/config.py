@@ -14,10 +14,6 @@ class Settings(BaseSettings):
     JISHO_BATCH_MAX_CONCURRENCY: int = 4
     FURIGANA_BATCH_MAX_ITEMS: int = 20
 
-    YOMI_API_URL: str = "https://yomi.onrender.com/analyze"
-    YOMI_TIMEOUT_SECONDS: float = 5.0
-    YOMI_ENABLED: bool = True
-
     OPENAI_API_KEY: str = ""
     MANGA_GPT_MODEL: str = "gpt-4o"
     MANGA_DALLE_MODEL: str = "dall-e-3"
