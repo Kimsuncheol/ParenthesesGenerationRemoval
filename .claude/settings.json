@@ -5,7 +5,25 @@
       "Bash(python -c \":*)",
       "Bash(/Library/Frameworks/Python.framework/Versions/3.12/bin/pip3 install:*)",
       "Bash(/Library/Frameworks/Python.framework/Versions/3.12/bin/python3 -c \":*)",
-      "Bash(wc -l /Users/gimseoncheol/Desktop/Parentheses_generation_removal/tests/services/*.py)"
+      "Bash(wc -l /Users/gimseoncheol/Desktop/Parentheses_generation_removal/tests/services/*.py)",
+      "Bash(python benchmark_furigana.py)",
+      "WebFetch(domain:ookii-tsuki.github.io)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl -s -X POST https://yomi.onrender.com/analyze/ -d 'text=日本語の勉強をしています&mode=furigana&to=hiragana')",
+      "Bash(curl -s -X POST https://yomi.onrender.com/analyze/ -d 'text=東京都に住んでいます&mode=normal&to=hiragana')",
+      "Bash(curl -s -X POST \"https://yomi.onrender.com/\" -d \"text=日本語\")",
+      "Bash(curl -s \"https://yomi.onrender.com/\" -H \"Accept: application/json\")",
+      "Bash(curl -s -I \"https://yomi.onrender.com/\")",
+      "Bash(curl -s -X POST https://yomi.onrender.com/api/analyze -d 'text=日本語の勉強をしています&mode=furigana&to=hiragana')",
+      "Bash(curl -s -X POST https://yomi.onrender.com/api/analyze/ -d 'text=日本語の勉強をしています&mode=furigana&to=hiragana')",
+      "Bash(curl -s \"https://yomi.onrender.com/api/\")",
+      "Bash(curl -v -X POST https://yomi.onrender.com/analyze -H 'Content-Type: application/x-www-form-urlencoded' -d 'text=日本語の勉強をしています&mode=furigana&to=hiragana')",
+      "Bash(curl -s -X POST https://yomi.onrender.com/analyze -H 'Content-Type: application/x-www-form-urlencoded' -d 'text=日本語の勉強をしています&mode=furigana&to=hiragana')",
+      "Bash(curl -s -X POST https://yomi.onrender.com/analyze -H 'Content-Type: application/x-www-form-urlencoded' -d 'text=東京都に住んでいます&mode=normal&to=hiragana')",
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python -m pytest tests/services/ -x -q)",
+      "Bash(python -m pytest tests/services/test_furigana_service.py tests/services/test_remove_furigana_service.py -v)",
+      "Bash(python -m pytest tests/services/test_furigana_service.py tests/services/test_remove_furigana_service.py -v --tb=short)"
     ]
   }
 }

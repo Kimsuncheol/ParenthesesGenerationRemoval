@@ -1,15 +1,15 @@
 import re
+import functools
 
 import jaconv
 import pykakasi
 import cutlet
-import requests
 
-from app.core.config import settings
 from app.models.text_models import AddFuriganaBatchItem
 
 _kks = pykakasi.kakasi()
 _katsu = cutlet.Cutlet(use_foreign_spelling=False)
+
 
 # Rendaku (consonant voicing): maps unvoiced → voiced kana
 _RENDAKU = str.maketrans(
@@ -21,22 +21,6 @@ _EMPTY_PARENS_RE = re.compile(r"\(\)")
 _READING_PARENS_RE = re.compile(r"\([^)]*\)")
 _FURIGANA_BRACKET_PAIRS = {"(": ")", "[": "]", "{": "}", "<": ">"}
 _FURIGANA_BOUNDARY_CHARS = set("()[]{}<>")
-
-def _yomi_fetch_words(text: str) -> list[dict] | None:
-    """Call the Yomi API and return its words array, or None on any failure."""
-    if not settings.YOMI_ENABLED or len(text) > 5000:
-        return None
-    try:
-        response = requests.post(
-            settings.YOMI_API_URL,
-            data={"text": text, "mode": "normal", "to": "hiragana"},
-            timeout=settings.YOMI_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        return response.json()["words"]
-    except Exception:
-        return None
-
 
 # Surface-level overrides for known unidic-lite misreadings
 _KANA_EXCEPTIONS: dict[str, str] = {
@@ -56,12 +40,14 @@ def _is_kanji(char: str) -> bool:
     return 0x4E00 <= cp <= 0x9FFF or 0x3400 <= cp <= 0x4DBF
 
 
+@functools.lru_cache(maxsize=2048)
 def _pykakasi_hira(char: str) -> str:
     """Return pykakasi's hiragana reading for a single character."""
     result = _kks.convert(char)
     return result[0]["hira"] if result else char
 
 
+@functools.lru_cache(maxsize=2048)
 def _single_char_hira(char: str) -> str | None:
     """Return a single-character reading from MeCab when available."""
     tokens = _katsu.tagger(char)
@@ -75,22 +61,24 @@ def _single_char_hira(char: str) -> str | None:
     return jaconv.kata2hira(kana)
 
 
-def _reading_hints(char: str) -> list[str]:
+@functools.lru_cache(maxsize=2048)
+def _reading_hints(char: str) -> tuple[str, ...]:
     """Collect likely readings for a single character."""
     hints: list[str] = []
     for candidate in (_single_char_hira(char), _pykakasi_hira(char)):
         if candidate and candidate not in hints:
             hints.append(candidate)
-    return hints
+    return tuple(hints)
 
 
-def _reading_variants(hint: str) -> list[str]:
+@functools.lru_cache(maxsize=512)
+def _reading_variants(hint: str) -> tuple[str, ...]:
     """Expand a base hint with voiced and semi-voiced variants."""
     variants: list[str] = []
     for candidate in (hint, hint.translate(_RENDAKU), hint.translate(_HANDAKU)):
         if candidate and candidate not in variants:
             variants.append(candidate)
-    return variants
+    return tuple(variants)
 
 
 def _has_kanji_neighbor(text: str, start: int, end: int) -> bool:
@@ -321,8 +309,6 @@ def _add_furigana_annotations(text: str) -> str:
     (e.g. 旅行(りょこう)) are normalized to per-kanji furigana when possible.
     """
     source_text = _EMPTY_PARENS_RE.sub("", text)
-    yomi_words = _yomi_fetch_words(source_text)
-    yomi_idx = 0
     result: list[str] = []
     cursor = 0
     source_cursor = 0
@@ -347,16 +333,8 @@ def _add_furigana_annotations(text: str) -> str:
             source_cursor = token_end
             continue
 
-        yomi_kana = ""
-        if yomi_words is not None:
-            while yomi_idx < len(yomi_words) and yomi_words[yomi_idx]["surface"] != surface:
-                yomi_idx += 1
-            if yomi_idx < len(yomi_words):
-                yomi_kana = yomi_words[yomi_idx].get("pronunciation_raw") or ""
-                yomi_idx += 1
-
         kana = getattr(token.feature, "kana", None)
-        if (token.is_unk or not kana) and not yomi_kana:
+        if token.is_unk or not kana:
             result.append(surface)
             cursor += len(surface)
             source_cursor = token_end
@@ -368,7 +346,7 @@ def _add_furigana_annotations(text: str) -> str:
             source_cursor,
             token_end,
             hiragana_only=False,
-        ) or jaconv.kata2hira(yomi_kana or kana)
+        ) or jaconv.kata2hira(kana)
         annotated = _annotate_token(surface, hira)
         placeholder_skeleton = _placeholder_skeleton(annotated)
         raw_placeholder = _raw_placeholder_skeleton(surface)
@@ -414,8 +392,6 @@ def _add_furigana_annotations(text: str) -> str:
 def _to_hiragana_only(text: str) -> str:
     """Convert Japanese text to plain hiragana while preserving non-Japanese text."""
     source_text = _normalize_hiragana_source_text(text)
-    yomi_words = _yomi_fetch_words(source_text)
-    yomi_idx = 0
     result: list[str] = []
     source_cursor = 0
 
@@ -437,16 +413,8 @@ def _to_hiragana_only(text: str) -> str:
             source_cursor = token_end
             continue
 
-        yomi_kana = ""
-        if yomi_words is not None:
-            while yomi_idx < len(yomi_words) and yomi_words[yomi_idx]["surface"] != surface:
-                yomi_idx += 1
-            if yomi_idx < len(yomi_words):
-                yomi_kana = yomi_words[yomi_idx].get("pronunciation_raw") or ""
-                yomi_idx += 1
-
         kana = getattr(token.feature, "kana", None)
-        if (token.is_unk or not kana) and not yomi_kana:
+        if token.is_unk or not kana:
             result.append(surface)
             source_cursor = token_end
             continue
@@ -457,7 +425,7 @@ def _to_hiragana_only(text: str) -> str:
             source_cursor,
             token_end,
             hiragana_only=True,
-        ) or jaconv.kata2hira(yomi_kana or kana)
+        ) or jaconv.kata2hira(kana)
         result.append(hira)
         source_cursor = token_end
 

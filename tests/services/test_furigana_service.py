@@ -1,5 +1,7 @@
 import pytest
+import requests
 
+from app.services import furigana_service
 from app.services.furigana_service import add_furigana, add_furigana_batch
 
 
@@ -126,3 +128,79 @@ def test_add_furigana_batch_hiragana_only_matches_single_item_results() -> None:
 
     assert [item.original_text for item in results] == texts
     assert [item.result_text for item in results] == [add_furigana(text, mode="hiragana_only") for text in texts]
+
+
+class MockYomiResponse:
+    status_code = 200
+
+    def __init__(self, words: list[dict]) -> None:
+        self._words = words
+
+    def raise_for_status(self) -> None:
+        pass
+
+    def json(self) -> dict:
+        return {"text": "", "converted": "", "words": self._words}
+
+
+def test_add_furigana_uses_yomi_reading(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Yomi's pronunciation_raw is preferred over the local cutlet reading."""
+    yomi_words = [
+        {"surface": "東京", "pronunciation_raw": "トウキョウ"},
+        {"surface": "都", "pronunciation_raw": "ト"},
+    ]
+
+    monkeypatch.setattr(
+        furigana_service.requests,
+        "post",
+        lambda *args, **kwargs: MockYomiResponse(yomi_words),
+    )
+
+    # Yomi returns トウキョウ for 東京 → split into 東(とう)京(きょう), and ト for 都 → 都(と)
+    result = add_furigana("東京都")
+
+    assert result == "東(とう)京(きょう)都(と)"
+
+
+def test_add_furigana_falls_back_on_yomi_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A network error from Yomi causes silent fallback to the local reading."""
+    def raise_error(*args, **kwargs) -> None:
+        raise requests.RequestException("timeout")
+
+    monkeypatch.setattr(furigana_service.requests, "post", raise_error)
+
+    # Local pipeline still produces a valid result
+    result = add_furigana("旅行")
+    assert result == "旅(りょ)行(こう)"
+
+
+def test_add_furigana_falls_back_when_yomi_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When YOMI_ENABLED=False the local pipeline is used without any HTTP call."""
+    called = []
+
+    def should_not_be_called(*args, **kwargs) -> None:
+        called.append(True)
+
+    monkeypatch.setattr(furigana_service.requests, "post", should_not_be_called)
+    monkeypatch.setattr(furigana_service.settings, "YOMI_ENABLED", False)
+
+    result = add_furigana("旅行")
+
+    assert called == []
+    assert result == "旅(りょ)行(こう)"
+
+
+def test_add_furigana_skips_yomi_for_long_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Texts over 5000 characters skip the Yomi API and use the local pipeline."""
+    called = []
+
+    def should_not_be_called(*args, **kwargs) -> None:
+        called.append(True)
+
+    monkeypatch.setattr(furigana_service.requests, "post", should_not_be_called)
+    monkeypatch.setattr(furigana_service.settings, "YOMI_ENABLED", True)
+
+    long_text = "旅行" * 2501  # > 5000 chars
+    add_furigana(long_text)
+
+    assert called == []
