@@ -137,56 +137,82 @@ def test_generate_parentheses(text: str, expected: str) -> None:
     assert generate_parentheses(text) == expected
 
 
-_MULTI_LEFT_INPUT = "終える = to finish\n行う = to carry out\n起こる = to happen\nおごる = to treat\n教わる = to be taught\n落ち着く = to calm down\n驚かす = to surprise"
-_MULTI_LEFT_OUTPUT = "to finish\nto carry out\nto happen\nto treat\nto be taught\nto calm down\nto surprise"
-
-_MULTI_RIGHT_INPUT = "終える = to finish\n行う = to carry out\n起こる = to happen\nおごる = to treat\n教わる = to be taught\n落ち着く = to calm down\n驚かす = to surprise"
-_MULTI_RIGHT_OUTPUT = "終える\n行う\n起こる\nおごる\n教わる\n落ち着く\n驚かす"
-
-_MULTI_SPECIAL_LEFT_INPUT = "* 終える = to finish\n* 行う = to carry out\n* 起こる = to happen\n* おごる = to treat\n* 教わる = to be taught\n* 落ち着く = to calm down\n* 驚かす = to surprise"
-_MULTI_SPECIAL_RIGHT_KEEP = "* 終える\n* 行う\n* 起こる\n* おごる\n* 教わる\n* 落ち着く\n* 驚かす"
-_MULTI_SPECIAL_RIGHT_STRIP = "終える\n行う\n起こる\nおごる\n教わる\n落ち着く\n驚かす"
+_MULTI_INPUT   = "終える = to finish\n行う = to carry out\n起こる = to happen\nおごる = to treat\n教わる = to be taught\n落ち着く = to calm down\n驚かす = to surprise"
+_MULTI_RIGHT   = "終える\n行う\n起こる\nおごる\n教わる\n落ち着く\n驚かす"
+_MULTI_LEFT    = "to finish\nto carry out\nto happen\nto treat\nto be taught\nto calm down\nto surprise"
 
 # fmt: off
 REMOVE_EQUAL_SIGN_CASES = [
     # (text, remove_side, strip_leading_specials, expected)
 
-    # ── remove_side="left" (case 1: single line, no specials) ──────────────
-    ("終える = to finish",          "left",  False, "to finish"),
-    ("犬 = dog",                    "left",  False, "dog"),
-    ("食べる=to eat",               "left",  False, "to eat"),
+    # ── splitter: = ────────────────────────────────────────────────────────
+    ("終える = to finish",   "left",  False, "to finish"),
+    ("犬 = dog",             "left",  False, "dog"),
+    ("食べる=to eat",        "left",  False, "to eat"),
+    (_MULTI_INPUT,           "left",  False, _MULTI_LEFT),
+    ("終える = to finish",   "right", False, "終える"),
+    ("犬 = dog",             "right", False, "犬"),
+    ("食べる=to eat",        "right", False, "食べる"),
+    (_MULTI_INPUT,           "right", False, _MULTI_RIGHT),
 
-    # ── remove_side="left" (case 2: multi-line, no specials) ───────────────
-    (_MULTI_LEFT_INPUT,             "left",  False, _MULTI_LEFT_OUTPUT),
+    # ── splitter: - ────────────────────────────────────────────────────────
+    ("終える - to finish",   "left",  False, "to finish"),
+    ("終える - to finish",   "right", False, "終える"),
 
-    # ── remove_side="left" (case 3: single line with leading specials) ─────
-    # specials are on the left → naturally discarded with the left side
-    ("* 終える = to finish",        "left",  False, "to finish"),
-    ("- 犬 = dog",                  "left",  False, "dog"),
+    # ── splitter: : ────────────────────────────────────────────────────────
+    ("終える: to finish",    "left",  False, "to finish"),
+    ("終える: to finish",    "right", False, "終える"),
 
-    # ── remove_side="left" (case 4: multi-line with leading specials) ──────
-    (_MULTI_SPECIAL_LEFT_INPUT,     "left",  False, _MULTI_LEFT_OUTPUT),
+    # ── splitter: ; ────────────────────────────────────────────────────────
+    ("終える; to finish",    "left",  False, "to finish"),
+    ("終える; to finish",    "right", False, "終える"),
 
-    # ── remove_side="right" (case 1: single line, no specials) ────────────
-    ("終える = to finish",          "right", False, "終える"),
-    ("犬 = dog",                    "right", False, "犬"),
-    ("食べる=to eat",               "right", False, "食べる"),
+    # ── splitter: , ────────────────────────────────────────────────────────
+    ("終える, to finish",    "left",  False, "to finish"),
+    ("終える, to finish",    "right", False, "終える"),
 
-    # ── remove_side="right" (case 2: multi-line, no specials) ─────────────
-    (_MULTI_RIGHT_INPUT,            "right", False, _MULTI_RIGHT_OUTPUT),
+    # ── splitter: . ────────────────────────────────────────────────────────
+    ("終える. to finish",    "left",  False, "to finish"),
+    ("終える. to finish",    "right", False, "終える"),
 
-    # ── remove_side="right" (case 3/4: with leading specials, keep) ────────
-    ("* 終える = to finish",        "right", False, "* 終える"),
-    (_MULTI_SPECIAL_LEFT_INPUT,     "right", False, _MULTI_SPECIAL_RIGHT_KEEP),
+    # ── splitter: / ────────────────────────────────────────────────────────
+    ("終える/to finish",     "left",  False, "to finish"),
+    ("終える/to finish",     "right", False, "終える"),
 
-    # ── remove_side="right" (case 3/4: with leading specials, strip) ───────
-    ("* 終える = to finish",        "right", True,  "終える"),
-    ("** 食べる = to eat",          "right", True,  "食べる"),
-    (_MULTI_SPECIAL_LEFT_INPUT,     "right", True,  _MULTI_SPECIAL_RIGHT_STRIP),
+    # ── splitter: ( ────────────────────────────────────────────────────────
+    ("終える(to finish)",    "left",  False, "to finish"),
+    ("終える(to finish)",    "right", False, "終える"),
 
-    # ── no equal sign — return line/text unchanged ─────────────────────────
-    ("終える",                      "left",  False, "終える"),
-    ("終える",                      "right", False, "終える"),
+    # ── splitter: [ ────────────────────────────────────────────────────────
+    ("終える[to finish]",    "left",  False, "to finish"),
+    ("終える[to finish]",    "right", False, "終える"),
+
+    # ── splitter: { ────────────────────────────────────────────────────────
+    ("終える{to finish}",    "left",  False, "to finish"),
+    ("終える{to finish}",    "right", False, "終える"),
+
+    # ── splitter: * ── now the first char when used as list marker ─────────
+    # * at index 0 → right side includes the original word + delimiter
+    ("* 終える = to finish", "left",  False, "終える = to finish"),
+    # * at index 0 → left side is empty
+    ("* 終える = to finish", "right", False, ""),
+
+    # ── splitter: " ────────────────────────────────────────────────────────
+    ('終える "to finish"',   "left",  False, 'to finish"'),
+    ('終える "to finish"',   "right", False, "終える"),
+
+    # ── splitter: ' ────────────────────────────────────────────────────────
+    ("終える 'to finish'",   "left",  False, "to finish'"),
+    ("終える 'to finish'",   "right", False, "終える"),
+
+    # ── strip_leading_specials (only relevant for non-splitter lead chars) ─
+    # % is not a splitter, so = is found; strip_leading_specials cleans left
+    ("% 終える = to finish", "right", False, "% 終える"),
+    ("% 終える = to finish", "right", True,  "終える"),
+
+    # ── no splitter found — return text unchanged ─────────────────────────
+    ("終える",               "left",  False, "終える"),
+    ("終える",               "right", False, "終える"),
 ]
 # fmt: on
 

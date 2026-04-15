@@ -13,6 +13,12 @@ _LEADING_SPECIAL_RE = re.compile(
     r'^[^\u3040-\u30FF\u4E00-\u9FFF\u3400-\u4DBF\uFF10-\uFF19a-zA-Z0-9]+'
 )
 
+# Characters recognized as splitters (first occurrence in a line is used)
+_SPLITTER_CHARS = frozenset('=-:;,./()[]{}"\'*')
+
+# Maps an opening bracket splitter to its expected closing bracket
+_CLOSING_BRACKET = {"(": ")", "[": "]", "{": "}"}
+
 
 def _needs_parentheses(char: str) -> bool:
     cp = ord(char)
@@ -41,14 +47,26 @@ def generate_parentheses(text: str) -> str:
     return "".join(result)
 
 
+def _find_splitter(line: str) -> int:
+    for i, ch in enumerate(line):
+        if ch in _SPLITTER_CHARS:
+            return i
+    return -1
+
+
 def _remove_equal_sign_line(
     line: str, remove_side: Literal["left", "right"], strip_leading_specials: bool
 ) -> str:
-    idx = line.find("=")
+    idx = _find_splitter(line)
     if idx == -1:
         return line
+    splitter_char = line[idx]
     if remove_side == "left":
-        return line[idx + 1 :].strip()
+        right = line[idx + 1 :].strip()
+        closing = _CLOSING_BRACKET.get(splitter_char)
+        if closing and right.endswith(closing):
+            right = right[:-1].strip()
+        return right
     else:
         left = line[:idx].strip()
         if strip_leading_specials:
