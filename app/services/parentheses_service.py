@@ -1,4 +1,5 @@
 import re
+from typing import Literal
 
 _OPEN_BRACKETS = set("([{<")
 _BRACKET_PAIRS = {"(": ")", "[": "]", "{": "}", "<": ">"}
@@ -33,6 +34,16 @@ def generate_parentheses(text: str) -> str:
         if _needs_parentheses(char) and i not in protected:
             result.append("()")
     return "".join(result)
+
+
+def remove_equal_sign(text: str, remove_side: Literal["left", "right"]) -> str:
+    idx = text.find("=")
+    if idx == -1:
+        return text
+    if remove_side == "left":
+        return text[idx + 1 :].strip()
+    else:
+        return text[:idx].strip()
 
 
 def remove_parentheses(text: str) -> str:

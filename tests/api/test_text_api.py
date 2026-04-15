@@ -492,3 +492,58 @@ def test_openapi_includes_manga_path() -> None:
     schema = app.openapi()
 
     assert "/text/manga/generate-panels" in schema["paths"]
+
+
+def test_remove_equal_sign_endpoint_keeps_right_side() -> None:
+    response = client.post(
+        "/text/remove-equal-sign",
+        json={"text": "終える = to finish", "remove_side": "left"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "終える = to finish",
+        "result_text": "to finish",
+    }
+
+
+def test_remove_equal_sign_endpoint_keeps_left_side() -> None:
+    response = client.post(
+        "/text/remove-equal-sign",
+        json={"text": "終える = to finish", "remove_side": "right"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "終える = to finish",
+        "result_text": "終える",
+    }
+
+
+def test_remove_equal_sign_endpoint_returns_original_when_no_equal_sign() -> None:
+    response = client.post(
+        "/text/remove-equal-sign",
+        json={"text": "終える", "remove_side": "left"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "終える",
+        "result_text": "終える",
+    }
+
+
+def test_remove_equal_sign_endpoint_validates_remove_side() -> None:
+    response = client.post(
+        "/text/remove-equal-sign",
+        json={"text": "終える = to finish", "remove_side": "invalid"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_openapi_includes_remove_equal_sign_path() -> None:
+    app.openapi_schema = None
+    schema = app.openapi()
+
+    assert "/text/remove-equal-sign" in schema["paths"]

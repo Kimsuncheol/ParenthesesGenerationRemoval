@@ -9,6 +9,8 @@ from app.models.text_models import (
     GenerateParenthesesResponse,
     MangaPanelGenerationRequest,
     MangaPanelGenerationResponse,
+    RemoveEqualSignRequest,
+    RemoveEqualSignResponse,
     RemoveFuriganaRequest,
     RemoveFuriganaResponse,
     RemoveParenthesesRequest,
@@ -30,6 +32,13 @@ from app.services import (
 )
 
 router = APIRouter(prefix="/text", tags=["text"])
+
+
+@router.post("/remove-equal-sign", response_model=RemoveEqualSignResponse)
+def remove_equal_sign_endpoint(body: RemoveEqualSignRequest) -> RemoveEqualSignResponse:
+    result = parentheses_service.remove_equal_sign(body.text, body.remove_side)
+    print(result)
+    return RemoveEqualSignResponse(original_text=body.text, result_text=result)
 
 
 @router.post("/remove-parentheses", response_model=RemoveParenthesesResponse)

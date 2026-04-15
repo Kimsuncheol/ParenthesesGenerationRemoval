@@ -14,6 +14,16 @@ class RemoveParenthesesResponse(BaseModel):
     result_text: str
 
 
+class RemoveEqualSignRequest(BaseModel):
+    text: str
+    remove_side: Literal["left", "right"]
+
+
+class RemoveEqualSignResponse(BaseModel):
+    original_text: str
+    result_text: str
+
+
 class RemoveFuriganaRequest(BaseModel):
     text: str
     remove_brackets: bool = True

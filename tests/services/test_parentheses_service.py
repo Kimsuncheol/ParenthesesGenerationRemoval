@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.parentheses_service import generate_parentheses, remove_parentheses
+from app.services.parentheses_service import generate_parentheses, remove_equal_sign, remove_parentheses
 
 # fmt: off
 SAMPLE_CASES = [
@@ -135,3 +135,25 @@ GENERATE_CASES = [
 @pytest.mark.parametrize("text, expected", GENERATE_CASES)
 def test_generate_parentheses(text: str, expected: str) -> None:
     assert generate_parentheses(text) == expected
+
+
+# fmt: off
+REMOVE_EQUAL_SIGN_CASES = [
+    # remove_side="left" keeps the right side
+    ("終える = to finish",    "left",  "to finish"),
+    ("犬 = dog",              "left",  "dog"),
+    ("食べる=to eat",         "left",  "to eat"),
+    # remove_side="right" keeps the left side
+    ("終える = to finish",    "right", "終える"),
+    ("犬 = dog",              "right", "犬"),
+    ("食べる=to eat",         "right", "食べる"),
+    # no equal sign — return text unchanged
+    ("終える",                "left",  "終える"),
+    ("終える",                "right", "終える"),
+]
+# fmt: on
+
+
+@pytest.mark.parametrize("text, remove_side, expected", REMOVE_EQUAL_SIGN_CASES)
+def test_remove_equal_sign(text: str, remove_side: str, expected: str) -> None:
+    assert remove_equal_sign(text, remove_side) == expected  # type: ignore[arg-type]
