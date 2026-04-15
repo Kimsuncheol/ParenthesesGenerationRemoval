@@ -139,17 +139,24 @@ def test_generate_parentheses(text: str, expected: str) -> None:
 
 # fmt: off
 REMOVE_EQUAL_SIGN_CASES = [
-    # remove_side="left" keeps the right side
-    ("終える = to finish",    "left",  "to finish"),
-    ("犬 = dog",              "left",  "dog"),
-    ("食べる=to eat",         "left",  "to eat"),
-    # remove_side="right" keeps the left side
-    ("終える = to finish",    "right", "終える"),
-    ("犬 = dog",              "right", "犬"),
-    ("食べる=to eat",         "right", "食べる"),
+    # remove_side="left" keeps the right side (case 1: no leading specials)
+    ("終える = to finish",        "left",  "to finish"),
+    ("犬 = dog",                  "left",  "dog"),
+    ("食べる=to eat",             "left",  "to eat"),
+    # remove_side="left" keeps the right side (case 2: leading specials — no effect on right side)
+    ("* 終える = to finish",      "left",  "to finish"),
+    ("- 犬 = dog",                "left",  "dog"),
+    # remove_side="right" keeps the left side (case 1: no leading specials)
+    ("終える = to finish",        "right", "終える"),
+    ("犬 = dog",                  "right", "犬"),
+    ("食べる=to eat",             "right", "食べる"),
+    # remove_side="right" strips leading specials before keeping left side (case 2)
+    ("* 終える = to finish",      "right", "終える"),
+    ("- 犬 = dog",                "right", "犬"),
+    ("** 食べる = to eat",        "right", "食べる"),
     # no equal sign — return text unchanged
-    ("終える",                "left",  "終える"),
-    ("終える",                "right", "終える"),
+    ("終える",                    "left",  "終える"),
+    ("終える",                    "right", "終える"),
 ]
 # fmt: on
 

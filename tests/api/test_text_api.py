@@ -507,6 +507,19 @@ def test_remove_equal_sign_endpoint_keeps_right_side() -> None:
     }
 
 
+def test_remove_equal_sign_endpoint_keeps_right_side_with_leading_specials() -> None:
+    response = client.post(
+        "/text/remove-equal-sign",
+        json={"text": "* 終える = to finish", "remove_side": "left"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "* 終える = to finish",
+        "result_text": "to finish",
+    }
+
+
 def test_remove_equal_sign_endpoint_keeps_left_side() -> None:
     response = client.post(
         "/text/remove-equal-sign",
@@ -516,6 +529,19 @@ def test_remove_equal_sign_endpoint_keeps_left_side() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "original_text": "終える = to finish",
+        "result_text": "終える",
+    }
+
+
+def test_remove_equal_sign_endpoint_strips_leading_specials_from_left_side() -> None:
+    response = client.post(
+        "/text/remove-equal-sign",
+        json={"text": "* 終える = to finish", "remove_side": "right"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "* 終える = to finish",
         "result_text": "終える",
     }
 

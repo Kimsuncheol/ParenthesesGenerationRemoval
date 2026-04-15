@@ -8,6 +8,11 @@ _CLOSE_BRACKETS = set(_BRACKET_PAIRS.values())
 # Matches digits+. that form a list marker, at start of text or right after 。
 _LIST_MARKER_RE = re.compile(r'(?:^|(?<=。))([0-9]+)\.')
 
+# Strips leading characters that are not letters, digits, or Japanese script
+_LEADING_SPECIAL_RE = re.compile(
+    r'^[^\u3040-\u30FF\u4E00-\u9FFF\u3400-\u4DBF\uFF10-\uFF19a-zA-Z0-9]+'
+)
+
 
 def _needs_parentheses(char: str) -> bool:
     cp = ord(char)
@@ -43,7 +48,8 @@ def remove_equal_sign(text: str, remove_side: Literal["left", "right"]) -> str:
     if remove_side == "left":
         return text[idx + 1 :].strip()
     else:
-        return text[:idx].strip()
+        left = text[:idx].strip()
+        return _LEADING_SPECIAL_RE.sub("", left)
 
 
 def remove_parentheses(text: str) -> str:
