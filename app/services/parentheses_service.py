@@ -41,15 +41,31 @@ def generate_parentheses(text: str) -> str:
     return "".join(result)
 
 
-def remove_equal_sign(text: str, remove_side: Literal["left", "right"]) -> str:
-    idx = text.find("=")
+def _remove_equal_sign_line(
+    line: str, remove_side: Literal["left", "right"], strip_leading_specials: bool
+) -> str:
+    idx = line.find("=")
     if idx == -1:
-        return text
+        return line
     if remove_side == "left":
-        return text[idx + 1 :].strip()
+        return line[idx + 1 :].strip()
     else:
-        left = text[:idx].strip()
-        return _LEADING_SPECIAL_RE.sub("", left)
+        left = line[:idx].strip()
+        if strip_leading_specials:
+            left = _LEADING_SPECIAL_RE.sub("", left)
+        return left
+
+
+def remove_equal_sign(
+    text: str,
+    remove_side: Literal["left", "right"],
+    strip_leading_specials: bool = False,
+) -> str:
+    lines = text.split("\n")
+    return "\n".join(
+        _remove_equal_sign_line(line, remove_side, strip_leading_specials)
+        for line in lines
+    )
 
 
 def remove_parentheses(text: str) -> str:

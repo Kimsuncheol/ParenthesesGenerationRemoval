@@ -17,6 +17,7 @@ class RemoveParenthesesResponse(BaseModel):
 class RemoveEqualSignRequest(BaseModel):
     text: str
     remove_side: Literal["left", "right"]
+    strip_leading_specials: bool = False
 
 
 class RemoveEqualSignResponse(BaseModel):

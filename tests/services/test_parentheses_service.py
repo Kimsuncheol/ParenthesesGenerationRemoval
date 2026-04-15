@@ -137,30 +137,60 @@ def test_generate_parentheses(text: str, expected: str) -> None:
     assert generate_parentheses(text) == expected
 
 
+_MULTI_LEFT_INPUT = "終える = to finish\n行う = to carry out\n起こる = to happen\nおごる = to treat\n教わる = to be taught\n落ち着く = to calm down\n驚かす = to surprise"
+_MULTI_LEFT_OUTPUT = "to finish\nto carry out\nto happen\nto treat\nto be taught\nto calm down\nto surprise"
+
+_MULTI_RIGHT_INPUT = "終える = to finish\n行う = to carry out\n起こる = to happen\nおごる = to treat\n教わる = to be taught\n落ち着く = to calm down\n驚かす = to surprise"
+_MULTI_RIGHT_OUTPUT = "終える\n行う\n起こる\nおごる\n教わる\n落ち着く\n驚かす"
+
+_MULTI_SPECIAL_LEFT_INPUT = "* 終える = to finish\n* 行う = to carry out\n* 起こる = to happen\n* おごる = to treat\n* 教わる = to be taught\n* 落ち着く = to calm down\n* 驚かす = to surprise"
+_MULTI_SPECIAL_RIGHT_KEEP = "* 終える\n* 行う\n* 起こる\n* おごる\n* 教わる\n* 落ち着く\n* 驚かす"
+_MULTI_SPECIAL_RIGHT_STRIP = "終える\n行う\n起こる\nおごる\n教わる\n落ち着く\n驚かす"
+
 # fmt: off
 REMOVE_EQUAL_SIGN_CASES = [
-    # remove_side="left" keeps the right side (case 1: no leading specials)
-    ("終える = to finish",        "left",  "to finish"),
-    ("犬 = dog",                  "left",  "dog"),
-    ("食べる=to eat",             "left",  "to eat"),
-    # remove_side="left" keeps the right side (case 2: leading specials — no effect on right side)
-    ("* 終える = to finish",      "left",  "to finish"),
-    ("- 犬 = dog",                "left",  "dog"),
-    # remove_side="right" keeps the left side (case 1: no leading specials)
-    ("終える = to finish",        "right", "終える"),
-    ("犬 = dog",                  "right", "犬"),
-    ("食べる=to eat",             "right", "食べる"),
-    # remove_side="right" strips leading specials before keeping left side (case 2)
-    ("* 終える = to finish",      "right", "終える"),
-    ("- 犬 = dog",                "right", "犬"),
-    ("** 食べる = to eat",        "right", "食べる"),
-    # no equal sign — return text unchanged
-    ("終える",                    "left",  "終える"),
-    ("終える",                    "right", "終える"),
+    # (text, remove_side, strip_leading_specials, expected)
+
+    # ── remove_side="left" (case 1: single line, no specials) ──────────────
+    ("終える = to finish",          "left",  False, "to finish"),
+    ("犬 = dog",                    "left",  False, "dog"),
+    ("食べる=to eat",               "left",  False, "to eat"),
+
+    # ── remove_side="left" (case 2: multi-line, no specials) ───────────────
+    (_MULTI_LEFT_INPUT,             "left",  False, _MULTI_LEFT_OUTPUT),
+
+    # ── remove_side="left" (case 3: single line with leading specials) ─────
+    # specials are on the left → naturally discarded with the left side
+    ("* 終える = to finish",        "left",  False, "to finish"),
+    ("- 犬 = dog",                  "left",  False, "dog"),
+
+    # ── remove_side="left" (case 4: multi-line with leading specials) ──────
+    (_MULTI_SPECIAL_LEFT_INPUT,     "left",  False, _MULTI_LEFT_OUTPUT),
+
+    # ── remove_side="right" (case 1: single line, no specials) ────────────
+    ("終える = to finish",          "right", False, "終える"),
+    ("犬 = dog",                    "right", False, "犬"),
+    ("食べる=to eat",               "right", False, "食べる"),
+
+    # ── remove_side="right" (case 2: multi-line, no specials) ─────────────
+    (_MULTI_RIGHT_INPUT,            "right", False, _MULTI_RIGHT_OUTPUT),
+
+    # ── remove_side="right" (case 3/4: with leading specials, keep) ────────
+    ("* 終える = to finish",        "right", False, "* 終える"),
+    (_MULTI_SPECIAL_LEFT_INPUT,     "right", False, _MULTI_SPECIAL_RIGHT_KEEP),
+
+    # ── remove_side="right" (case 3/4: with leading specials, strip) ───────
+    ("* 終える = to finish",        "right", True,  "終える"),
+    ("** 食べる = to eat",          "right", True,  "食べる"),
+    (_MULTI_SPECIAL_LEFT_INPUT,     "right", True,  _MULTI_SPECIAL_RIGHT_STRIP),
+
+    # ── no equal sign — return line/text unchanged ─────────────────────────
+    ("終える",                      "left",  False, "終える"),
+    ("終える",                      "right", False, "終える"),
 ]
 # fmt: on
 
 
-@pytest.mark.parametrize("text, remove_side, expected", REMOVE_EQUAL_SIGN_CASES)
-def test_remove_equal_sign(text: str, remove_side: str, expected: str) -> None:
-    assert remove_equal_sign(text, remove_side) == expected  # type: ignore[arg-type]
+@pytest.mark.parametrize("text, remove_side, strip_leading_specials, expected", REMOVE_EQUAL_SIGN_CASES)
+def test_remove_equal_sign(text: str, remove_side: str, strip_leading_specials: bool, expected: str) -> None:
+    assert remove_equal_sign(text, remove_side, strip_leading_specials) == expected  # type: ignore[arg-type]

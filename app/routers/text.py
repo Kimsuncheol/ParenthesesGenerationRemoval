@@ -36,7 +36,7 @@ router = APIRouter(prefix="/text", tags=["text"])
 
 @router.post("/remove-equal-sign", response_model=RemoveEqualSignResponse)
 def remove_equal_sign_endpoint(body: RemoveEqualSignRequest) -> RemoveEqualSignResponse:
-    result = parentheses_service.remove_equal_sign(body.text, body.remove_side)
+    result = parentheses_service.remove_equal_sign(body.text, body.remove_side, body.strip_leading_specials)
     print(result)
     return RemoveEqualSignResponse(original_text=body.text, result_text=result)
 

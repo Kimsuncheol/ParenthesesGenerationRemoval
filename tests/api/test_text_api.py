@@ -494,7 +494,13 @@ def test_openapi_includes_manga_path() -> None:
     assert "/text/manga/generate-panels" in schema["paths"]
 
 
-def test_remove_equal_sign_endpoint_keeps_right_side() -> None:
+_MULTI_INPUT = "終える = to finish\n行う = to carry out\n起こる = to happen\nおごる = to treat\n教わる = to be taught\n落ち着く = to calm down\n驚かす = to surprise"
+_MULTI_SPECIAL_INPUT = "* 終える = to finish\n* 行う = to carry out\n* 起こる = to happen\n* おごる = to treat\n* 教わる = to be taught\n* 落ち着く = to calm down\n* 驚かす = to surprise"
+
+
+# ── remove_side="left" ────────────────────────────────────────────────────────
+
+def test_remove_equal_sign_endpoint_keeps_right_side_single_line() -> None:
     response = client.post(
         "/text/remove-equal-sign",
         json={"text": "終える = to finish", "remove_side": "left"},
@@ -507,7 +513,19 @@ def test_remove_equal_sign_endpoint_keeps_right_side() -> None:
     }
 
 
-def test_remove_equal_sign_endpoint_keeps_right_side_with_leading_specials() -> None:
+def test_remove_equal_sign_endpoint_keeps_right_side_multi_line() -> None:
+    expected = "to finish\nto carry out\nto happen\nto treat\nto be taught\nto calm down\nto surprise"
+
+    response = client.post(
+        "/text/remove-equal-sign",
+        json={"text": _MULTI_INPUT, "remove_side": "left"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"original_text": _MULTI_INPUT, "result_text": expected}
+
+
+def test_remove_equal_sign_endpoint_keeps_right_side_single_line_with_specials() -> None:
     response = client.post(
         "/text/remove-equal-sign",
         json={"text": "* 終える = to finish", "remove_side": "left"},
@@ -520,7 +538,21 @@ def test_remove_equal_sign_endpoint_keeps_right_side_with_leading_specials() -> 
     }
 
 
-def test_remove_equal_sign_endpoint_keeps_left_side() -> None:
+def test_remove_equal_sign_endpoint_keeps_right_side_multi_line_with_specials() -> None:
+    expected = "to finish\nto carry out\nto happen\nto treat\nto be taught\nto calm down\nto surprise"
+
+    response = client.post(
+        "/text/remove-equal-sign",
+        json={"text": _MULTI_SPECIAL_INPUT, "remove_side": "left"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"original_text": _MULTI_SPECIAL_INPUT, "result_text": expected}
+
+
+# ── remove_side="right" ───────────────────────────────────────────────────────
+
+def test_remove_equal_sign_endpoint_keeps_left_side_single_line() -> None:
     response = client.post(
         "/text/remove-equal-sign",
         json={"text": "終える = to finish", "remove_side": "right"},
@@ -533,7 +565,19 @@ def test_remove_equal_sign_endpoint_keeps_left_side() -> None:
     }
 
 
-def test_remove_equal_sign_endpoint_strips_leading_specials_from_left_side() -> None:
+def test_remove_equal_sign_endpoint_keeps_left_side_multi_line() -> None:
+    expected = "終える\n行う\n起こる\nおごる\n教わる\n落ち着く\n驚かす"
+
+    response = client.post(
+        "/text/remove-equal-sign",
+        json={"text": _MULTI_INPUT, "remove_side": "right"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"original_text": _MULTI_INPUT, "result_text": expected}
+
+
+def test_remove_equal_sign_endpoint_keeps_specials_by_default_single_line() -> None:
     response = client.post(
         "/text/remove-equal-sign",
         json={"text": "* 終える = to finish", "remove_side": "right"},
@@ -542,9 +586,48 @@ def test_remove_equal_sign_endpoint_strips_leading_specials_from_left_side() -> 
     assert response.status_code == 200
     assert response.json() == {
         "original_text": "* 終える = to finish",
+        "result_text": "* 終える",
+    }
+
+
+def test_remove_equal_sign_endpoint_keeps_specials_by_default_multi_line() -> None:
+    expected = "* 終える\n* 行う\n* 起こる\n* おごる\n* 教わる\n* 落ち着く\n* 驚かす"
+
+    response = client.post(
+        "/text/remove-equal-sign",
+        json={"text": _MULTI_SPECIAL_INPUT, "remove_side": "right"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"original_text": _MULTI_SPECIAL_INPUT, "result_text": expected}
+
+
+def test_remove_equal_sign_endpoint_strips_specials_when_requested_single_line() -> None:
+    response = client.post(
+        "/text/remove-equal-sign",
+        json={"text": "* 終える = to finish", "remove_side": "right", "strip_leading_specials": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "* 終える = to finish",
         "result_text": "終える",
     }
 
+
+def test_remove_equal_sign_endpoint_strips_specials_when_requested_multi_line() -> None:
+    expected = "終える\n行う\n起こる\nおごる\n教わる\n落ち着く\n驚かす"
+
+    response = client.post(
+        "/text/remove-equal-sign",
+        json={"text": _MULTI_SPECIAL_INPUT, "remove_side": "right", "strip_leading_specials": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"original_text": _MULTI_SPECIAL_INPUT, "result_text": expected}
+
+
+# ── edge cases ────────────────────────────────────────────────────────────────
 
 def test_remove_equal_sign_endpoint_returns_original_when_no_equal_sign() -> None:
     response = client.post(
