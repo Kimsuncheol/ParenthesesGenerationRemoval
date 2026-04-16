@@ -20,22 +20,21 @@ Rules:
    - If multiple expressions are possible, choose the one that most directly matches the Korean meaning.
 
 2. Grouping (important)
-   - After extracting the target word for every pair, group pairs that share the same dictionary-form word into a single output row.
-   - "Same word" means the dictionary form is identical (e.g. 消す groups with 消す).
+   - After extracting the target word for every pair, group pairs that share the same word value into a single output row.
+   - "Same word" means the particle+dictionary-form is identical (e.g. を消す groups with を消す).
    - A grouped row represents one spreadsheet row with multiple examples.
    - Preserve the relative order of groups by the first occurrence of each word in the input.
 
 3. "word"
-   - Must be the dictionary form of the extracted Japanese vocabulary item.
-   - Normalize conjugated forms back to dictionary form.
-   - Preserve fixed expressions as full expressions.
-   - Examples of fixed expressions include:
-     - 気に入る
-     - 気にする
-     - 気になる
-     - 気を付ける
-     - 首になる
-   - For a grouped row, this is the single shared dictionary form.
+   - Write the target word as it appears in usage: particle + dictionary-form verb.
+   - If the verb appears with a grammatical particle (を, に, で, が, etc.) in the sentence,
+     include that particle as a prefix: e.g. を消す, に乗る, が分かる.
+   - Normalize any conjugated verb to dictionary form (e.g. 消して → 消す, 乗った → 乗る).
+   - For fixed multi-word expressions, preserve the full expression including any internal
+     particles: 気に入る, 気にする, 気になる, 気を付ける, 首になる.
+   - Do NOT include the sentence's subject, object noun, or any other surrounding words —
+     only the particle (if present) and the verb/expression.
+   - For a grouped row, this is the single shared value.
 
 4. "meaning_english"
    - Give a short natural English dictionary meaning for the extracted word.
