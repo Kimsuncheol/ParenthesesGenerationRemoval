@@ -24,6 +24,9 @@ class Settings(BaseSettings):
         "avoid color, avoid western comic style, avoid chibi, avoid speech bubbles"
     )
 
+    VOCAB_GPT_MODEL: str = "gpt-4o"
+    VOCAB_MAX_PAIRS: int = 20
+
     model_config = {"env_file": ".env"}
 
 

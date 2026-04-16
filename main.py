@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.core.config import settings
 from app.routers import index as index_router
 from app.routers import text as text_router
+from app.api.routes import vocab as vocab_router
 
 app = FastAPI(
     title=settings.APP_TITLE,
@@ -12,3 +13,4 @@ app = FastAPI(
 
 app.include_router(index_router.router)
 app.include_router(text_router.router)
+app.include_router(vocab_router.router)

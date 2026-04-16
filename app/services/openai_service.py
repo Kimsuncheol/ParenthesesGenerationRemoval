@@ -1,0 +1,59 @@
+import json
+
+import openai
+from pydantic import ValidationError
+
+from app.core.config import settings
+from app.models.schemas import VocabEntry, VocabPair
+from app.prompts.vocab_prompt import SYSTEM_PROMPT, build_user_prompt
+
+_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+
+
+def extract_vocab(pairs: list[VocabPair]) -> list[VocabEntry]:
+    """
+    Call OpenAI and return a validated list of VocabEntry objects.
+
+    Raises:
+        openai.OpenAIError    -- network, auth, rate-limit, or server errors; caller maps to HTTP 502
+        ValueError            -- structurally wrong response (missing key, wrong array length); caller maps to HTTP 502
+        pydantic.ValidationError -- field-level validation failure in OpenAI output; caller maps to HTTP 422
+    """
+    raw_pairs = [p.model_dump() for p in pairs]
+    user_prompt = build_user_prompt(raw_pairs)
+
+    response = _client.chat.completions.create(
+        model=settings.VOCAB_GPT_MODEL,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.2,
+    )
+
+    raw_text = response.choices[0].message.content
+
+    # Stage 1: JSON parse
+    data = json.loads(raw_text)
+
+    # Stage 2: structural validation
+    if not isinstance(data, dict) or "results" not in data:
+        raise ValueError(
+            f"OpenAI response missing 'results' key. Got keys: {list(data.keys()) if isinstance(data, dict) else type(data).__name__}"
+        )
+
+    raw_results = data["results"]
+
+    if not isinstance(raw_results, list):
+        raise ValueError(
+            f"OpenAI 'results' field is not a list, got {type(raw_results).__name__}."
+        )
+
+    if len(raw_results) != len(pairs):
+        raise ValueError(
+            f"OpenAI returned {len(raw_results)} items, expected {len(pairs)}."
+        )
+
+    # Stage 3: per-item Pydantic validation — raises ValidationError on failure
+    return [VocabEntry.model_validate(item) for item in raw_results]
