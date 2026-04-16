@@ -9,6 +9,22 @@ from app.prompts.vocab_prompt import SYSTEM_PROMPT, build_user_prompt
 
 _client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
 
+# Ordered longest-first so "から" and "まで" are tried before their first character.
+_LEADING_PARTICLES = ("から", "まで", "は", "が", "を", "に", "で", "へ", "と", "の")
+
+
+def _strip_leading_particle(word: str) -> str:
+    """Remove a leading grammatical particle from a word field if present.
+
+    Fixed expressions such as 気に入る or 気を付ける start with a kanji (気),
+    so they are never affected. Only plain particle-prefixed verbs like
+    を消す → 消す or に乗る → 乗る are stripped.
+    """
+    for particle in _LEADING_PARTICLES:
+        if word.startswith(particle) and len(word) > len(particle):
+            return word[len(particle):]
+    return word
+
 
 def extract_vocab(pairs: list[VocabPair]) -> list[VocabEntry]:
     """
@@ -64,4 +80,10 @@ def extract_vocab(pairs: list[VocabPair]) -> list[VocabEntry]:
         )
 
     # Stage 3: per-item Pydantic validation — raises ValidationError on failure
-    return [VocabEntry.model_validate(item) for item in raw_results]
+    entries = [VocabEntry.model_validate(item) for item in raw_results]
+
+    # Stage 4: strip any leading grammatical particle the model prepended to word
+    for entry in entries:
+        entry.word = _strip_leading_particle(entry.word)
+
+    return entries

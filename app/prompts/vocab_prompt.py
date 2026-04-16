@@ -5,6 +5,10 @@ SYSTEM_PROMPT: str = (
     "Your task is to identify the Japanese target expression from each Japanese sentence "
     "based on the provided Korean meaning, then return structured vocabulary data for "
     "spreadsheet insertion.\n\n"
+    "CRITICAL RULE: The \"word\" field must NEVER contain a standalone Japanese particle "
+    "(は, が, を, に, で, へ, と, の, から, まで) as a prefix. "
+    "Write only the verb or expression in dictionary form. "
+    "WRONG: をしまう, を消す, に乗る. CORRECT: しまう, 消す, 乗る.\n\n"
     "Return only valid JSON.\n"
     "Do not include markdown.\n"
     "Do not include explanations.\n"
@@ -20,20 +24,22 @@ Rules:
    - If multiple expressions are possible, choose the one that most directly matches the Korean meaning.
 
 2. Grouping (important)
-   - After extracting the target word for every pair, group pairs that share the same word value into a single output row.
-   - "Same word" means the particle+dictionary-form is identical (e.g. を消す groups with を消す).
+   - After extracting the target word for every pair, group pairs that share the same dictionary-form word into a single output row.
+   - "Same word" means the dictionary form is identical (e.g. 消す groups with 消す).
    - A grouped row represents one spreadsheet row with multiple examples.
    - Preserve the relative order of groups by the first occurrence of each word in the input.
 
 3. "word"
-   - Write the target word as it appears in usage: particle + dictionary-form verb.
-   - If the verb appears with a grammatical particle (を, に, で, が, etc.) in the sentence,
-     include that particle as a prefix: e.g. を消す, に乗る, が分かる.
-   - Normalize any conjugated verb to dictionary form (e.g. 消して → 消す, 乗った → 乗る).
-   - For fixed multi-word expressions, preserve the full expression including any internal
-     particles: 気に入る, 気にする, 気になる, 気を付ける, 首になる.
-   - Do NOT include the sentence's subject, object noun, or any other surrounding words —
-     only the particle (if present) and the verb/expression.
+   - Must be the dictionary form of the extracted Japanese vocabulary item only.
+   - NEVER prefix the word with a standalone particle (は, が, を, に, で, へ, と, の, から, まで).
+     WRONG: をしまう / を消す / に乗る / で働く
+     CORRECT: しまう / 消す / 乗る / 働く
+   - Normalize conjugated forms back to dictionary form (e.g. 消して → 消す, 乗った → 乗る).
+   - Do NOT include the sentence's subject, object noun, or any surrounding words.
+   - Exception — fixed idiomatic expressions where the particle is inseparable from the
+     expression (not a grammatical case particle):
+     e.g. 気に入る, 気にする, 気になる, 気を付ける, 首になる.
+     These must be written in full as fixed expressions.
    - For a grouped row, this is the single shared value.
 
 4. "meaning_english"
@@ -115,7 +121,7 @@ def build_user_prompt(pairs: list[dict]) -> str:
 }"""
     grouped_example = (
         '{\n'
-        '  "word": "を消す",\n'
+        '  "word": "消す",\n'
         '  "meaning_english": "1. erase\\n2. turn off",\n'
         '  "meaning_korean": "1. 지우다\\n2. 끄다",\n'
         '  "pronunciation": "けす",\n'
@@ -125,12 +131,18 @@ def build_user_prompt(pairs: list[dict]) -> str:
         '  "example_hiragana": "1. こくばんのじをけす。\\n2. てれびをけす。"\n'
         '}'
     )
+    particle_reminder = (
+        "REMINDER — word field: write the verb in plain dictionary form only. "
+        "Never prefix it with a particle. "
+        "消す NOT を消す. しまう NOT をしまう. 乗る NOT に乗る."
+    )
     return (
+        f"{particle_reminder}\n\n"
         f"Input pairs:\n{pairs_json}\n\n"
         f"Return a JSON object with a single key \"results\" whose value is an array "
         f"of objects — one per unique target word (pairs sharing the same word are merged "
         f"into one row with numbered lists separated by \\n).\n\n"
         f"Each object must follow this exact schema:\n{schema}\n\n"
-        f"Example of a correctly grouped row (two pairs sharing を消す):\n{grouped_example}\n\n"
+        f"Example of a correctly grouped row (two pairs sharing 消す):\n{grouped_example}\n\n"
         f"{_RULES}"
     )
