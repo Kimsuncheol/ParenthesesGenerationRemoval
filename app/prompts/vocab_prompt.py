@@ -39,14 +39,14 @@ Rules:
 4. "meaning_english"
    - Give a short natural English dictionary meaning for the extracted word.
    - Choose the meaning that best matches each sentence's usage.
-   - If the row is grouped (multiple examples), format as a numbered list:
-     "1. meaning_a\n2. meaning_b"
+   - If the row is grouped (multiple examples), format as a numbered list using \\n as the
+     line separator: "1. meaning_a\\n2. meaning_b"
    - If the row has only one example, write the meaning as a plain string with no number prefix.
 
 5. "meaning_korean"
    - Copy the intended Korean meaning if it correctly matches the extracted word.
    - If the provided Korean meaning is slightly unnatural, normalize it.
-   - If grouped, format as a numbered list: "1. 의미_a\n2. 의미_b"
+   - If grouped, format as a numbered list: "1. 의미_a\\n2. 의미_b"
    - If not grouped, write as a plain string.
 
 6. "pronunciation"
@@ -56,22 +56,22 @@ Rules:
 
 7. "example"
    - Copy each input Japanese sentence exactly unless clearly broken.
-   - If grouped, format as a numbered list: "1. sentence_a\n2. sentence_b"
+   - If grouped, format as a numbered list: "1. sentence_a\\n2. sentence_b"
    - If not grouped, write as a plain string.
 
 8. "translation_english"
    - Provide a natural English translation of each example sentence.
-   - If grouped, format as a numbered list: "1. translation_a\n2. translation_b"
+   - If grouped, format as a numbered list: "1. translation_a\\n2. translation_b"
    - If not grouped, write as a plain string.
 
 9. "translation_korean"
    - Provide a natural Korean translation of each example sentence.
-   - If grouped, format as a numbered list: "1. 번역_a\n2. 번역_b"
+   - If grouped, format as a numbered list: "1. 번역_a\\n2. 번역_b"
    - If not grouped, write as a plain string.
 
 10. "example_hiragana"
     - Convert each example sentence fully into hiragana. Keep punctuation.
-    - If grouped, format as a numbered list: "1. ひらがな_a\n2. ひらがな_b"
+    - If grouped, format as a numbered list: "1. ひらがな_a\\n2. ひらがな_b"
     - If not grouped, write as a plain string.
 
 11. Quality rules
@@ -81,7 +81,7 @@ Rules:
     - Use natural Japanese, Korean, and English.
     - The extracted word must actually appear in the sentence either directly or as a conjugated form.
     - The extracted word must match the provided Korean meaning as used in the sentence.
-    - Numbered list items must use the format "N. value" separated by newlines ("\\n").
+    - Numbered list items must be separated by \\n (a JSON newline escape), not by spaces or commas.
     - Do not use bullet points, dashes, or any other list marker.
 
 12. Output count
@@ -113,11 +113,24 @@ def build_user_prompt(pairs: list[dict]) -> str:
   "translation_korean": "string",
   "example_hiragana": "string"
 }"""
+    grouped_example = (
+        '{\n'
+        '  "word": "を消す",\n'
+        '  "meaning_english": "1. erase\\n2. turn off",\n'
+        '  "meaning_korean": "1. 지우다\\n2. 끄다",\n'
+        '  "pronunciation": "けす",\n'
+        '  "example": "1. 黒板の字を消す。\\n2. テレビを消す。",\n'
+        '  "translation_english": "1. Erase the letters on the blackboard.\\n2. Turn off the TV.",\n'
+        '  "translation_korean": "1. 칠판의 글씨를 지우다.\\n2. TV를 끄다.",\n'
+        '  "example_hiragana": "1. こくばんのじをけす。\\n2. てれびをけす。"\n'
+        '}'
+    )
     return (
         f"Input pairs:\n{pairs_json}\n\n"
         f"Return a JSON object with a single key \"results\" whose value is an array "
         f"of objects — one per unique target word (pairs sharing the same word are merged "
-        f"into one row with numbered lists).\n\n"
+        f"into one row with numbered lists separated by \\n).\n\n"
         f"Each object must follow this exact schema:\n{schema}\n\n"
+        f"Example of a correctly grouped row (two pairs sharing を消す):\n{grouped_example}\n\n"
         f"{_RULES}"
     )
