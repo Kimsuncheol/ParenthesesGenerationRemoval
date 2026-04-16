@@ -14,9 +14,14 @@ def extract_vocab(pairs: list[VocabPair]) -> list[VocabEntry]:
     """
     Call OpenAI and return a validated list of VocabEntry objects.
 
+    Pairs that share the same target word are grouped into a single VocabEntry
+    whose multi-valued fields (meaning, example, translations, hiragana) are
+    formatted as numbered lists ("1. value\\n2. value"). The returned list may
+    therefore contain fewer items than the input pairs list.
+
     Raises:
         openai.OpenAIError    -- network, auth, rate-limit, or server errors; caller maps to HTTP 502
-        ValueError            -- structurally wrong response (missing key, wrong array length); caller maps to HTTP 502
+        ValueError            -- structurally wrong response (missing key, empty array); caller maps to HTTP 502
         pydantic.ValidationError -- field-level validation failure in OpenAI output; caller maps to HTTP 422
     """
     raw_pairs = [p.model_dump() for p in pairs]
@@ -50,9 +55,12 @@ def extract_vocab(pairs: list[VocabPair]) -> list[VocabEntry]:
             f"OpenAI 'results' field is not a list, got {type(raw_results).__name__}."
         )
 
-    if len(raw_results) != len(pairs):
+    if len(raw_results) == 0:
+        raise ValueError("OpenAI returned an empty 'results' array.")
+
+    if len(raw_results) > len(pairs):
         raise ValueError(
-            f"OpenAI returned {len(raw_results)} items, expected {len(pairs)}."
+            f"OpenAI returned {len(raw_results)} items, which exceeds the {len(pairs)} input pairs."
         )
 
     # Stage 3: per-item Pydantic validation — raises ValidationError on failure
