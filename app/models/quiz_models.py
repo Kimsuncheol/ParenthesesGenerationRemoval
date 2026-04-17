@@ -2,8 +2,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.core.config import settings
-
 
 QuizType = Literal["matching", "fill_blank"]
 QuizLanguage = Literal["english", "japanese"]
@@ -38,7 +36,7 @@ class QuizGenerateRequest(BaseModel):
     course: str
     level: JlptLevel | None = None
     day: int = Field(ge=1)
-    count: int = Field(ge=1, le=settings.QUIZ_MAX_ITEMS)
+    count: int = Field(ge=1)
 
     @field_validator("course", mode="before")
     @classmethod

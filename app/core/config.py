@@ -43,7 +43,6 @@ class Settings(BaseSettings):
     VOCAB_GPT_MODEL: str = "gpt-4o"
     VOCAB_MAX_PAIRS: int = 20
     QUIZ_GPT_MODEL: str = "gpt-4o"
-    QUIZ_MAX_ITEMS: int = 20
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
