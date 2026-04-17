@@ -25,6 +25,7 @@ class QuizGenerateRequest(BaseModel):
     language: QuizLanguage
     course: QuizCourse
     level: JlptLevel | None = None
+    day: int = Field(ge=1)
     count: int = Field(ge=1, le=settings.QUIZ_MAX_ITEMS)
 
     @model_validator(mode="after")
@@ -63,6 +64,7 @@ class MatchingQuizResponse(BaseModel):
     language: QuizLanguage
     course: QuizCourse
     level: JlptLevel | None
+    day: int
     items: list[MatchingItem]
     choices: list[MatchingChoice]
     answer_key: list[MatchingAnswerKeyItem]
@@ -88,6 +90,7 @@ class FillBlankQuizResponse(BaseModel):
     language: QuizLanguage
     course: QuizCourse
     level: JlptLevel | None
+    day: int
     questions: list[FillBlankQuestion]
 
 

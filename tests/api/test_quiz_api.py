@@ -21,6 +21,7 @@ def test_quiz_generate_endpoint_success(monkeypatch: pytest.MonkeyPatch) -> None
             language=body.language,
             course=body.course,
             level=body.level,
+            day=body.day,
             items=[MatchingItem(id="q1", text="abandon")],
             choices=[MatchingChoice(id="c1", text="to leave behind")],
             answer_key=[MatchingAnswerKeyItem(item_id="q1", choice_id="c1")],
@@ -34,6 +35,7 @@ def test_quiz_generate_endpoint_success(monkeypatch: pytest.MonkeyPatch) -> None
             "quiz_type": "matching",
             "language": "english",
             "course": "CSAT",
+            "day": 1,
             "count": 1,
         },
     )
@@ -44,6 +46,7 @@ def test_quiz_generate_endpoint_success(monkeypatch: pytest.MonkeyPatch) -> None
         "language": "english",
         "course": "CSAT",
         "level": None,
+        "day": 1,
         "items": [{"id": "q1", "text": "abandon"}],
         "choices": [{"id": "c1", "text": "to leave behind"}],
         "answer_key": [{"item_id": "q1", "choice_id": "c1"}],
@@ -57,6 +60,7 @@ def test_quiz_generate_endpoint_validates_invalid_course_level_combinations() ->
             "quiz_type": "matching",
             "language": "japanese",
             "course": "JLPT",
+            "day": 1,
             "count": 1,
         },
     )
@@ -67,6 +71,7 @@ def test_quiz_generate_endpoint_validates_invalid_course_level_combinations() ->
             "language": "english",
             "course": "JLPT",
             "level": "N1",
+            "day": 1,
             "count": 1,
         },
     )
@@ -89,6 +94,7 @@ def test_quiz_generate_endpoint_returns_422_when_not_enough_rows(
             "quiz_type": "matching",
             "language": "english",
             "course": "CSAT",
+            "day": 1,
             "count": 3,
         },
     )
@@ -112,6 +118,7 @@ def test_quiz_generate_endpoint_returns_502_on_upstream_error(
             "quiz_type": "fill_blank",
             "language": "english",
             "course": "CSAT",
+            "day": 1,
             "count": 1,
         },
     )
@@ -125,3 +132,43 @@ def test_openapi_includes_quiz_generate_path() -> None:
     schema = app.openapi()
 
     assert "/v1/quizzes/generate" in schema["paths"]
+
+
+def test_quiz_generate_endpoint_requires_day() -> None:
+    response = client.post(
+        "/v1/quizzes/generate",
+        json={
+            "quiz_type": "matching",
+            "language": "english",
+            "course": "CSAT",
+            "count": 1,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_quiz_generate_endpoint_validates_day_is_natural_number() -> None:
+    day_zero = client.post(
+        "/v1/quizzes/generate",
+        json={
+            "quiz_type": "matching",
+            "language": "english",
+            "course": "CSAT",
+            "day": 0,
+            "count": 1,
+        },
+    )
+    day_string = client.post(
+        "/v1/quizzes/generate",
+        json={
+            "quiz_type": "matching",
+            "language": "english",
+            "course": "CSAT",
+            "day": "Day1",
+            "count": 1,
+        },
+    )
+
+    assert day_zero.status_code == 422
+    assert day_string.status_code == 422

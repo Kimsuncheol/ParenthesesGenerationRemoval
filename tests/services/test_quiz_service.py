@@ -37,11 +37,13 @@ def test_generate_matching_english_general_course(monkeypatch: pytest.MonkeyPatc
             quiz_type="matching",
             language="english",
             course="CSAT",
+            day=1,
             count=2,
         )
     )
 
-    assert captured["path"] == "english/csat"
+    assert captured["path"] == "english/csat/Day1"
+    assert response.day == 1
     assert response.quiz_type == "matching"
     assert [item.text for item in response.items] == ["abandon", "brief"]
     assert [choice.text for choice in response.choices] == ["to leave behind", "short"]
@@ -68,6 +70,7 @@ def test_generate_matching_english_collocation_uses_collocation_field(
             quiz_type="matching",
             language="english",
             course="COLLOCATION",
+            day=12,
             count=1,
         )
     )
@@ -77,7 +80,7 @@ def test_generate_matching_english_collocation_uses_collocation_field(
 
 
 def test_generate_matching_japanese_jlpt_uses_level_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_JLPT_N2", "/japanese/jlpt/n2")
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_JLPT_N2", "/japanese/jlpt/level/n2")
     monkeypatch.setattr(quiz_service.random, "sample", _first_items)
     monkeypatch.setattr(quiz_service.random, "shuffle", _no_shuffle)
 
@@ -95,11 +98,13 @@ def test_generate_matching_japanese_jlpt_uses_level_path(monkeypatch: pytest.Mon
             language="japanese",
             course="JLPT",
             level="N2",
+            day=3,
             count=1,
         )
     )
 
-    assert captured["path"] == "japanese/jlpt/n2"
+    assert captured["path"] == "japanese/jlpt/level/n2/Day3"
+    assert response.day == 3
     assert response.items[0].text == "解決"
     assert response.choices[0].text == "solution"
 
@@ -146,6 +151,7 @@ def test_generate_fill_blank_english_uses_openai_options(monkeypatch: pytest.Mon
             quiz_type="fill_blank",
             language="english",
             course="TOEIC",
+            day=1,
             count=1,
         )
     )
@@ -204,17 +210,19 @@ def test_generate_fill_blank_collocation_uses_collocation_field(
             quiz_type="fill_blank",
             language="english",
             course="COLLOCATION",
+            day=12,
             count=1,
         )
     )
 
     assert response.questions[0].answer_text == "make a decision"
+    assert response.day == 12
 
 
 def test_generate_fill_blank_japanese_uses_translation_aliases(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_JLPT_N1", "japanese/jlpt/n1")
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_JLPT_N1", "japanese/jlpt/level/n1")
     monkeypatch.setattr(quiz_service.random, "sample", _first_items)
     monkeypatch.setattr(quiz_service.random, "shuffle", _no_shuffle)
     monkeypatch.setattr(
@@ -255,6 +263,7 @@ def test_generate_fill_blank_japanese_uses_translation_aliases(
             language="japanese",
             course="JLPT",
             level="N1",
+            day=1,
             count=1,
         )
     )
@@ -279,6 +288,7 @@ def test_generate_quiz_raises_when_not_enough_eligible_rows(monkeypatch: pytest.
                 quiz_type="matching",
                 language="english",
                 course="CSAT",
+                day=1,
                 count=1,
             )
         )
@@ -303,3 +313,75 @@ def test_validate_fill_blank_rejects_bad_openai_output() -> None:
 
     with pytest.raises(quiz_service.QuizUpstreamError):
         quiz_service._validate_fill_blank_results(raw_results, [{"id": "q1"}])
+
+
+def test_resolve_collection_path_appends_day_to_english_course(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_CSAT", "/english/csat")
+
+    path = quiz_service._resolve_collection_path(
+        QuizGenerateRequest(
+            quiz_type="matching",
+            language="english",
+            course="CSAT",
+            day=1,
+            count=1,
+        )
+    )
+
+    assert path == "english/csat/Day1"
+
+
+def test_resolve_collection_path_appends_day_to_collocation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_COLLOCATION", "english/collocations/")
+
+    path = quiz_service._resolve_collection_path(
+        QuizGenerateRequest(
+            quiz_type="matching",
+            language="english",
+            course="COLLOCATION",
+            day=12,
+            count=1,
+        )
+    )
+
+    assert path == "english/collocations/Day12"
+
+
+def test_resolve_collection_path_appends_day_to_japanese_level(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_JLPT_N2", "/japanese/jlpt/level/n2")
+
+    path = quiz_service._resolve_collection_path(
+        QuizGenerateRequest(
+            quiz_type="matching",
+            language="japanese",
+            course="JLPT",
+            level="N2",
+            day=3,
+            count=1,
+        )
+    )
+
+    assert path == "japanese/jlpt/level/n2/Day3"
+
+
+def test_resolve_collection_path_rejects_non_collection_day_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_CSAT", "english")
+
+    with pytest.raises(quiz_service.QuizUpstreamError):
+        quiz_service._resolve_collection_path(
+            QuizGenerateRequest(
+                quiz_type="matching",
+                language="english",
+                course="CSAT",
+                day=1,
+                count=1,
+            )
+        )

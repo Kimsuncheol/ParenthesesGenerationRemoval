@@ -152,13 +152,31 @@ def _resolve_collection_path(body: QuizGenerateRequest) -> str:
         }
         path = course_paths.get(body.course)
 
-    if not path or not path.strip("/"):
+    base_path = _normalize_firestore_path(path)
+    if not base_path:
         raise QuizUpstreamError(
             f"Firestore collection path is not configured for course={body.course}"
             + (f", level={body.level}" if body.level else "")
             + "."
         )
-    return path.strip("/")
+    return _build_day_collection_path(base_path, body.day)
+
+
+def _normalize_firestore_path(path: str | None) -> str | None:
+    if not path:
+        return None
+    normalized = path.strip().strip("/")
+    return normalized or None
+
+
+def _build_day_collection_path(base_path: str, day: int) -> str:
+    collection_path = f"{base_path}/Day{day}"
+    segments = [segment for segment in collection_path.split("/") if segment]
+    if len(segments) % 2 == 0:
+        raise QuizUpstreamError(
+            f"Firestore Day path must resolve to a collection path: {collection_path}"
+        )
+    return "/".join(segments)
 
 
 def _normalize_rows(raw_rows: list[dict[str, Any]], body: QuizGenerateRequest) -> list[NormalizedQuizRow]:
@@ -269,6 +287,7 @@ def _build_matching_response(
         language=body.language,
         course=body.course,
         level=body.level,
+        day=body.day,
         items=items,
         choices=choices,
         answer_key=answer_key,
@@ -301,6 +320,7 @@ def _build_fill_blank_response(
         language=body.language,
         course=body.course,
         level=body.level,
+        day=body.day,
         questions=questions,
     )
 
