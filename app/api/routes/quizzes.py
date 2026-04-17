@@ -12,9 +12,11 @@ router = APIRouter(prefix="/v1/quizzes", tags=["quizzes"])
 
 @router.post("/generate", response_model=QuizGenerateResponse)
 def generate_quiz(body: QuizGenerateRequest) -> QuizGenerateResponse:
-    logger.info("generate_quiz request: %s", body.model_dump())
+    print("generate_quiz request:", body.model_dump())
     try:
-        return quiz_service.generate_quiz(body)
+        result = quiz_service.generate_quiz(body)
+        print("generate_quiz result:", result)
+        return result
     except quiz_service.NotEnoughQuizItemsError as exc:
         raise HTTPException(
             status_code=422,

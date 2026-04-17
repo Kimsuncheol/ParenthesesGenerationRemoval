@@ -14,6 +14,7 @@ from app.models.quiz_models import (
     FillBlankOption,
     FillBlankQuestion,
     FillBlankQuizResponse,
+    JapaneseMatchingItem,
     MatchingAnswerKeyItem,
     MatchingChoice,
     MatchingItem,
@@ -42,6 +43,8 @@ class NormalizedQuizRow:
     source_id: str
     target: str
     meaning: str | None = None
+    meaning_english: str | None = None
+    meaning_korean: str | None = None
     example: str | None = None
     translation_english: str | None = None
     translation_korean: str | None = None
@@ -197,13 +200,21 @@ def _normalize_rows(raw_rows: list[dict[str, Any]], body: QuizGenerateRequest) -
         )
 
         if body.quiz_type == "matching":
-            meaning = _get_field(raw_row, "meaning")
+            if body.language == "japanese":
+                meaning_english, meaning_korean, meaning = _get_japanese_matching_meanings(raw_row)
+            else:
+                meaning_english = None
+                meaning_korean = None
+                meaning = _get_field(raw_row, "meaning")
+
             if target and meaning:
                 rows.append(
                     NormalizedQuizRow(
                         source_id=source_id,
                         target=target,
                         meaning=meaning,
+                        meaning_english=meaning_english,
+                        meaning_korean=meaning_korean,
                         part_of_speech=part_of_speech,
                     )
                 )
@@ -211,22 +222,7 @@ def _normalize_rows(raw_rows: list[dict[str, Any]], body: QuizGenerateRequest) -
 
         example = _get_field(raw_row, "example")
         if body.language == "japanese":
-            translation_english = _get_field(
-                raw_row,
-                "Translation(English)",
-                "translation_english",
-                "translationEnglish",
-                "english_translation",
-                "translation english",
-            )
-            translation_korean = _get_field(
-                raw_row,
-                "Translation(Korean)",
-                "translation_korean",
-                "translationKorean",
-                "korean_translation",
-                "translation korean",
-            )
+            translation_english, translation_korean = _get_japanese_translations(raw_row)
             if target and example and translation_english and translation_korean:
                 rows.append(
                     NormalizedQuizRow(
@@ -262,6 +258,71 @@ def _normalize_rows(raw_rows: list[dict[str, Any]], body: QuizGenerateRequest) -
     return rows
 
 
+def _get_japanese_translations(row: dict[str, Any]) -> tuple[str | None, str | None]:
+    translation_english = _get_field(
+        row,
+        "Translation(English)",
+        "translation_english",
+        "translationEnglish",
+        "english_translation",
+        "translation english",
+    )
+    translation_korean = _get_field(
+        row,
+        "Translation(Korean)",
+        "translation_korean",
+        "translationKorean",
+        "korean_translation",
+        "translation korean",
+    )
+    return translation_english, translation_korean
+
+
+def _get_japanese_matching_meanings(
+    row: dict[str, Any],
+) -> tuple[str | None, str | None, str | None]:
+    direct_english = _get_field(
+        row,
+        "meaningEnglish",
+        "meaning_english",
+        "Meaning(English)",
+    )
+    translation_english = _get_field(
+        row,
+        "Translation(English)",
+        "translation_english",
+        "translationEnglish",
+        "english_translation",
+        "translation english",
+    )
+    direct_korean = _get_field(
+        row,
+        "meaningKorean",
+        "meaning_korean",
+        "Meaning(Korean)",
+    )
+    translation_korean = _get_field(
+        row,
+        "Translation(Korean)",
+        "translation_korean",
+        "translationKorean",
+        "korean_translation",
+        "translation korean",
+    )
+    legacy_meaning = _get_field(row, "meaning")
+
+    meaning_english = direct_english or translation_english
+    meaning_korean = direct_korean or translation_korean
+    choice_meaning = (
+        direct_english
+        or legacy_meaning
+        or translation_english
+        or direct_korean
+        or translation_korean
+    )
+    return meaning_english, meaning_korean, choice_meaning
+
+
 def _build_matching_response(
     body: QuizGenerateRequest,
     rows: list[NormalizedQuizRow],
@@ -273,7 +334,17 @@ def _build_matching_response(
     for index, row in enumerate(rows, start=1):
         item_id = f"q{index}"
         choice_id = f"c{index}"
-        items.append(MatchingItem(id=item_id, text=row.target))
+        if body.language == "japanese":
+            items.append(
+                JapaneseMatchingItem(
+                    id=item_id,
+                    text=row.target,
+                    meaningEnglish=row.meaning_english,
+                    meaningKorean=row.meaning_korean,
+                )
+            )
+        else:
+            items.append(MatchingItem(id=item_id, text=row.target))
         choices.append(MatchingChoice(id=choice_id, text=row.meaning or ""))
         answer_key.append(MatchingAnswerKeyItem(item_id=item_id, choice_id=choice_id))
 
@@ -395,8 +466,6 @@ def _validate_fill_blank_results(
             FillBlankQuestion(
                 id=result.id,
                 sentence=sentence,
-                translation_english=result.translation_english,
-                translation_korean=result.translation_korean,
                 options=response_options,
                 answer_id=answer_id,
                 answer_text=answer_text,

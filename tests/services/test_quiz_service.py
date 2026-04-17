@@ -109,6 +109,146 @@ def test_generate_matching_japanese_jlpt_uses_level_path(monkeypatch: pytest.Mon
     assert response.choices[0].text == "solution"
 
 
+def test_generate_matching_japanese_uses_meaning_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_JLPT_N5", "/japanese/jlpt/level/n5")
+    monkeypatch.setattr(quiz_service.random, "sample", _first_items)
+    monkeypatch.setattr(quiz_service.random, "shuffle", _no_shuffle)
+    monkeypatch.setattr(
+        quiz_service,
+        "fetch_firestore_documents",
+        lambda path: [
+            {
+                "word": "食べる",
+                "meaningEnglish": "to eat",
+                "meaningKorean": "먹다",
+            }
+        ],
+    )
+
+    response = quiz_service.generate_quiz(
+        QuizGenerateRequest(
+            quiz_type="matching",
+            language="japanese",
+            course="JLPT",
+            level="N5",
+            day=1,
+            count=1,
+        )
+    )
+
+    assert response.items[0].text == "食べる"
+    assert response.items[0].meaningEnglish == "to eat"
+    assert response.items[0].meaningKorean == "먹다"
+    assert not hasattr(response.items[0], "meaning_english")
+    assert not hasattr(response.items[0], "meaning_korean")
+    assert response.choices[0].text == "to eat"
+
+
+def test_generate_matching_japanese_prefers_meaning_english_over_legacy_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_JLPT_N5", "/japanese/jlpt/level/n5")
+    monkeypatch.setattr(quiz_service.random, "sample", _first_items)
+    monkeypatch.setattr(quiz_service.random, "shuffle", _no_shuffle)
+    monkeypatch.setattr(
+        quiz_service,
+        "fetch_firestore_documents",
+        lambda path: [
+            {
+                "word": "話す",
+                "meaningEnglish": "to speak",
+                "meaning": "legacy meaning",
+                "Translation(English)": "legacy translation",
+                "meaningKorean": "말하다",
+            }
+        ],
+    )
+
+    response = quiz_service.generate_quiz(
+        QuizGenerateRequest(
+            quiz_type="matching",
+            language="japanese",
+            course="JLPT",
+            level="N5",
+            day=1,
+            count=1,
+        )
+    )
+
+    assert response.items[0].meaningEnglish == "to speak"
+    assert response.items[0].meaningKorean == "말하다"
+    assert response.choices[0].text == "to speak"
+
+
+def test_generate_matching_japanese_falls_back_to_korean_meaning_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_JLPT_N5", "/japanese/jlpt/level/n5")
+    monkeypatch.setattr(quiz_service.random, "sample", _first_items)
+    monkeypatch.setattr(quiz_service.random, "shuffle", _no_shuffle)
+    monkeypatch.setattr(
+        quiz_service,
+        "fetch_firestore_documents",
+        lambda path: [{"word": "飲む", "meaningKorean": "마시다"}],
+    )
+
+    response = quiz_service.generate_quiz(
+        QuizGenerateRequest(
+            quiz_type="matching",
+            language="japanese",
+            course="JLPT",
+            level="N5",
+            day=1,
+            count=1,
+        )
+    )
+
+    assert response.items[0].text == "飲む"
+    assert response.items[0].meaningEnglish is None
+    assert response.items[0].meaningKorean == "마시다"
+    assert not hasattr(response.items[0], "meaning_english")
+    assert not hasattr(response.items[0], "meaning_korean")
+    assert response.choices[0].text == "마시다"
+
+
+def test_generate_matching_japanese_falls_back_to_translation_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_JLPT_N5", "/japanese/jlpt/level/n5")
+    monkeypatch.setattr(quiz_service.random, "sample", _first_items)
+    monkeypatch.setattr(quiz_service.random, "shuffle", _no_shuffle)
+    monkeypatch.setattr(
+        quiz_service,
+        "fetch_firestore_documents",
+        lambda path: [
+            {
+                "word": "読む",
+                "Translation(English)": "to read",
+                "Translation(Korean)": "읽다",
+            }
+        ],
+    )
+
+    response = quiz_service.generate_quiz(
+        QuizGenerateRequest(
+            quiz_type="matching",
+            language="japanese",
+            course="JLPT",
+            level="N5",
+            day=1,
+            count=1,
+        )
+    )
+
+    assert response.items[0].meaningEnglish == "to read"
+    assert response.items[0].meaningKorean == "읽다"
+    assert not hasattr(response.items[0], "meaning_english")
+    assert not hasattr(response.items[0], "meaning_korean")
+    assert response.choices[0].text == "to read"
+
+
 def test_generate_fill_blank_english_uses_openai_options(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_TOEIC", "english/toeic")
     monkeypatch.setattr(quiz_service.random, "sample", _first_items)
@@ -158,7 +298,7 @@ def test_generate_fill_blank_english_uses_openai_options(monkeypatch: pytest.Mon
 
     question = response.questions[0]
     assert question.sentence == "She _ the plan."
-    assert question.translation_english == "She gave up the plan."
+    assert not hasattr(question, "translation_english")
     assert [option.text for option in question.options] == ["abandoned", "adopted", "admired", "announced"]
     assert question.answer_id == "a"
     assert question.answer_text == "abandoned"
@@ -270,8 +410,10 @@ def test_generate_fill_blank_japanese_uses_translation_aliases(
 
     question = response.questions[0]
     assert question.sentence == "彼は問題を_した。"
-    assert question.translation_english == "He solved the problem."
-    assert question.translation_korean == "그는 문제를 해결했다."
+    assert not hasattr(question, "translation_english")
+    assert not hasattr(question, "translation_korean")
+    assert not hasattr(question, "translationEnglish")
+    assert not hasattr(question, "translationKorean")
 
 
 def test_generate_quiz_raises_when_not_enough_eligible_rows(monkeypatch: pytest.MonkeyPatch) -> None:

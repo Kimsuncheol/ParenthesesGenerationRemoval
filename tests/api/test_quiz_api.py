@@ -7,7 +7,16 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from main import app
-from app.models.quiz_models import MatchingAnswerKeyItem, MatchingChoice, MatchingItem, MatchingQuizResponse
+from app.models.quiz_models import (
+    FillBlankOption,
+    FillBlankQuestion,
+    FillBlankQuizResponse,
+    JapaneseMatchingItem,
+    MatchingAnswerKeyItem,
+    MatchingChoice,
+    MatchingItem,
+    MatchingQuizResponse,
+)
 from app.services import quiz_service
 
 
@@ -229,11 +238,125 @@ def test_quiz_generate_endpoint_returns_502_on_upstream_error(
     assert "unavailable" in response.json()["detail"]
 
 
+def test_quiz_generate_endpoint_omits_japanese_fill_blank_translation_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def mock_generate(body):
+        return FillBlankQuizResponse(
+            quiz_type="fill_blank",
+            language=body.language,
+            course=body.course,
+            level=body.level,
+            day=body.day,
+            questions=[
+                FillBlankQuestion(
+                    id="q1",
+                    sentence="彼は問題を_した。",
+                    options=[
+                        FillBlankOption(id="a", text="解決"),
+                        FillBlankOption(id="b", text="解説"),
+                        FillBlankOption(id="c", text="解放"),
+                        FillBlankOption(id="d", text="解散"),
+                    ],
+                    answer_id="a",
+                    answer_text="解決",
+                )
+            ],
+        )
+
+    monkeypatch.setattr(quiz_service, "generate_quiz", mock_generate)
+
+    response = client.post(
+        "/v1/quizzes/generate",
+        json={
+            "quiz_type": "fill_blank",
+            "language": "japanese",
+            "course": "JLPT",
+            "level": "N1",
+            "day": 1,
+            "count": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    question = response.json()["questions"][0]
+    assert "translation_english" not in question
+    assert "translation_korean" not in question
+    assert "translationEnglish" not in question
+    assert "translationKorean" not in question
+
+
+def test_quiz_generate_endpoint_serializes_japanese_matching_meaning_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def mock_generate(body):
+        return MatchingQuizResponse(
+            quiz_type="matching",
+            language=body.language,
+            course=body.course,
+            level=body.level,
+            day=body.day,
+            items=[
+                JapaneseMatchingItem(
+                    id="q1",
+                    text="食べる",
+                    meaningEnglish="to eat",
+                    meaningKorean="먹다",
+                )
+            ],
+            choices=[MatchingChoice(id="c1", text="to eat")],
+            answer_key=[MatchingAnswerKeyItem(item_id="q1", choice_id="c1")],
+        )
+
+    monkeypatch.setattr(quiz_service, "generate_quiz", mock_generate)
+
+    response = client.post(
+        "/v1/quizzes/generate",
+        json={
+            "quiz_type": "matching",
+            "language": "japanese",
+            "course": "JLPT",
+            "level": "N5",
+            "day": 1,
+            "count": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["meaningEnglish"] == "to eat"
+    assert item["meaningKorean"] == "먹다"
+    assert "meaning_english" not in item
+    assert "meaning_korean" not in item
+
+
 def test_openapi_includes_quiz_generate_path() -> None:
     app.openapi_schema = None
     schema = app.openapi()
 
     assert "/v1/quizzes/generate" in schema["paths"]
+
+
+def test_openapi_excludes_fill_blank_translation_fields() -> None:
+    app.openapi_schema = None
+    schema = app.openapi()
+    properties = schema["components"]["schemas"]["FillBlankQuestion"]["properties"]
+
+    assert "translation_english" not in properties
+    assert "translation_korean" not in properties
+    assert "translationEnglish" not in properties
+    assert "translationKorean" not in properties
+
+
+def test_openapi_excludes_snake_case_japanese_matching_meaning_fields() -> None:
+    app.openapi_schema = None
+    schema = app.openapi()
+    properties = schema["components"]["schemas"]["JapaneseMatchingItem"]["properties"]
+
+    assert "meaningEnglish" in properties
+    assert "meaningKorean" in properties
+    assert "meaning_english" not in properties
+    assert "meaning_korean" not in properties
 
 
 def test_quiz_generate_endpoint_requires_day() -> None:
