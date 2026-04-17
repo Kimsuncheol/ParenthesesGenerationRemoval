@@ -65,7 +65,6 @@ _ENGLISH_GENERAL_COURSES = {
     "CSAT",
     "CSAT_IDIOMS",
     "TOEIC",
-    "TOEFL_IELTS",
     "TOEFL_ITELS",
     "EXTREMELY_ADVANCED",
 }
@@ -145,7 +144,6 @@ def _resolve_collection_path(body: QuizGenerateRequest) -> str:
             "CSAT": settings.NEXT_PUBLIC_COURSE_PATH_CSAT,
             "CSAT_IDIOMS": settings.NEXT_PUBLIC_COURSE_PATH_CSAT_IDIOMS,
             "TOEIC": settings.NEXT_PUBLIC_COURSE_PATH_TOEIC,
-            "TOEFL_IELTS": settings.NEXT_PUBLIC_COURSE_PATH_TOEFL_IELTS,
             "TOEFL_ITELS": settings.NEXT_PUBLIC_COURSE_PATH_TOEFL_IELTS,
             "EXTREMELY_ADVANCED": settings.NEXT_PUBLIC_COURSE_PATH_EXTREMELY_ADVANCED,
             "COLLOCATION": settings.NEXT_PUBLIC_COURSE_PATH_COLLOCATION,

@@ -80,6 +80,108 @@ def test_quiz_generate_endpoint_validates_invalid_course_level_combinations() ->
     assert english_with_jlpt.status_code == 422
 
 
+@pytest.mark.parametrize(
+    ("input_course", "canonical_course"),
+    [
+        ("CSAT-Idioms", "CSAT_IDIOMS"),
+        ("TOEFL_ITELS", "TOEFL_ITELS"),
+        ("Extremely Advanced", "EXTREMELY_ADVANCED"),
+        ("Collocation", "COLLOCATION"),
+    ],
+)
+def test_quiz_generate_endpoint_accepts_course_aliases(
+    input_course: str,
+    canonical_course: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def mock_generate(body):
+        return MatchingQuizResponse(
+            quiz_type="matching",
+            language=body.language,
+            course=body.course,
+            level=body.level,
+            day=body.day,
+            items=[MatchingItem(id="q1", text="abandon")],
+            choices=[MatchingChoice(id="c1", text="to leave behind")],
+            answer_key=[MatchingAnswerKeyItem(item_id="q1", choice_id="c1")],
+        )
+
+    monkeypatch.setattr(quiz_service, "generate_quiz", mock_generate)
+
+    response = client.post(
+        "/v1/quizzes/generate",
+        json={
+            "quiz_type": "matching",
+            "language": "english",
+            "course": input_course,
+            "day": 1,
+            "count": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["course"] == canonical_course
+
+
+def test_quiz_generate_endpoint_accepts_toefl_ielts_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def mock_generate(body):
+        return MatchingQuizResponse(
+            quiz_type="matching",
+            language=body.language,
+            course=body.course,
+            level=body.level,
+            day=body.day,
+            items=[MatchingItem(id="q1", text="abandon")],
+            choices=[MatchingChoice(id="c1", text="to leave behind")],
+            answer_key=[MatchingAnswerKeyItem(item_id="q1", choice_id="c1")],
+        )
+
+    monkeypatch.setattr(quiz_service, "generate_quiz", mock_generate)
+
+    response = client.post(
+        "/v1/quizzes/generate",
+        json={
+            "quiz_type": "matching",
+            "language": "english",
+            "course": "TOEFL_IELTS",
+            "day": 1,
+            "count": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["course"] == "TOEFL_ITELS"
+
+
+def test_quiz_generate_endpoint_rejects_invalid_course_language_pairs() -> None:
+    japanese_with_english_course = client.post(
+        "/v1/quizzes/generate",
+        json={
+            "quiz_type": "matching",
+            "language": "japanese",
+            "course": "CSAT",
+            "level": "N1",
+            "day": 1,
+            "count": 1,
+        },
+    )
+    unknown_course = client.post(
+        "/v1/quizzes/generate",
+        json={
+            "quiz_type": "matching",
+            "language": "english",
+            "course": "GRE",
+            "day": 1,
+            "count": 1,
+        },
+    )
+
+    assert japanese_with_english_course.status_code == 422
+    assert unknown_course.status_code == 422
+
+
 def test_quiz_generate_endpoint_returns_422_when_not_enough_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

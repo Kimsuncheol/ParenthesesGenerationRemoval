@@ -333,6 +333,48 @@ def test_resolve_collection_path_appends_day_to_english_course(
     assert path == "english/csat/Day1"
 
 
+@pytest.mark.parametrize(
+    ("input_course", "expected_path"),
+    [
+        ("CSAT-Idioms", "english/csat-idioms/Day2"),
+        ("CSAT_IDIOMS", "english/csat-idioms/Day2"),
+        ("TOEFL_ITELS", "english/toefl-ielts/Day2"),
+        ("TOEFL_IELTS", "english/toefl-ielts/Day2"),
+        ("Extremely Advanced", "english/extremely-advanced/Day2"),
+        ("Collocation", "english/collocations/Day2"),
+    ],
+)
+def test_resolve_collection_path_normalizes_course_aliases(
+    input_course: str,
+    expected_path: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_CSAT_IDIOMS", "english/csat-idioms")
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_TOEFL_IELTS", "english/toefl-ielts")
+    monkeypatch.setattr(
+        settings,
+        "NEXT_PUBLIC_COURSE_PATH_EXTREMELY_ADVANCED",
+        "english/extremely-advanced",
+    )
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_COURSE_PATH_COLLOCATION", "english/collocations")
+
+    request = QuizGenerateRequest(
+        quiz_type="matching",
+        language="english",
+        course=input_course,
+        day=2,
+        count=1,
+    )
+
+    assert request.course in {
+        "CSAT_IDIOMS",
+        "TOEFL_ITELS",
+        "EXTREMELY_ADVANCED",
+        "COLLOCATION",
+    }
+    assert quiz_service._resolve_collection_path(request) == expected_path
+
+
 def test_resolve_collection_path_appends_day_to_collocation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

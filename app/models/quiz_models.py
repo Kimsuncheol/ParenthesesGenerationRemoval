@@ -1,17 +1,16 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.config import settings
 
 
 QuizType = Literal["matching", "fill_blank"]
 QuizLanguage = Literal["english", "japanese"]
-QuizCourse = Literal[
+CanonicalQuizCourse = Literal[
     "CSAT",
     "CSAT_IDIOMS",
     "TOEIC",
-    "TOEFL_IELTS",
     "TOEFL_ITELS",
     "EXTREMELY_ADVANCED",
     "COLLOCATION",
@@ -19,14 +18,38 @@ QuizCourse = Literal[
 ]
 JlptLevel = Literal["N1", "N2", "N3", "N4", "N5"]
 
+_COURSE_ALIASES: dict[str, CanonicalQuizCourse] = {
+    "CSAT": "CSAT",
+    "CSAT_IDIOMS": "CSAT_IDIOMS",
+    "CSAT-IDIOMS": "CSAT_IDIOMS",
+    "TOEIC": "TOEIC",
+    "TOEFL_ITELS": "TOEFL_ITELS",
+    "TOEFL_IELTS": "TOEFL_ITELS",
+    "EXTREMELY_ADVANCED": "EXTREMELY_ADVANCED",
+    "EXTREMELY ADVANCED": "EXTREMELY_ADVANCED",
+    "COLLOCATION": "COLLOCATION",
+    "JLPT": "JLPT",
+}
+
 
 class QuizGenerateRequest(BaseModel):
     quiz_type: QuizType
     language: QuizLanguage
-    course: QuizCourse
+    course: str
     level: JlptLevel | None = None
     day: int = Field(ge=1)
     count: int = Field(ge=1, le=settings.QUIZ_MAX_ITEMS)
+
+    @field_validator("course", mode="before")
+    @classmethod
+    def normalize_course(cls, value: object) -> CanonicalQuizCourse:
+        if not isinstance(value, str):
+            raise ValueError("course must be a string.")
+        normalized = " ".join(value.strip().split()).upper()
+        course = _COURSE_ALIASES.get(normalized)
+        if course is None:
+            raise ValueError("Unsupported quiz course.")
+        return course
 
     @model_validator(mode="after")
     def validate_course_level(self) -> "QuizGenerateRequest":
@@ -62,7 +85,7 @@ class MatchingAnswerKeyItem(BaseModel):
 class MatchingQuizResponse(BaseModel):
     quiz_type: Literal["matching"]
     language: QuizLanguage
-    course: QuizCourse
+    course: CanonicalQuizCourse
     level: JlptLevel | None
     day: int
     items: list[MatchingItem]
@@ -88,7 +111,7 @@ class FillBlankQuestion(BaseModel):
 class FillBlankQuizResponse(BaseModel):
     quiz_type: Literal["fill_blank"]
     language: QuizLanguage
-    course: QuizCourse
+    course: CanonicalQuizCourse
     level: JlptLevel | None
     day: int
     questions: list[FillBlankQuestion]
