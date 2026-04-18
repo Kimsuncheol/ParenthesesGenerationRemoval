@@ -49,23 +49,18 @@ Rules:
      line separator: "1. meaning_a\\n2. meaning_b"
    - If the row has only one example, write the meaning as a plain string with no number prefix.
 
-5. "meaning_korean"
-   - Copy the intended Korean meaning if it correctly matches the extracted word.
-   - If the provided Korean meaning is slightly unnatural, normalize it.
-   - If grouped, format as a numbered list: "1. 의미_a\\n2. 의미_b"
-   - If not grouped, write as a plain string.
+5. "_indices"
+   - Must be an array of the 0-based integer indices of the input pairs that were grouped into this row.
+   - If only one pair maps to this row, write a single-element array: [2].
+   - If multiple pairs were grouped, list all their indices in input order: [0, 1].
+   - This field is required on every output object.
 
 6. "pronunciation"
    - Must be the full hiragana reading of the extracted word only.
    - No romaji. No spaces.
    - For a grouped row, this is the single shared pronunciation.
 
-7. "example"
-   - Copy each input Japanese sentence exactly unless clearly broken.
-   - If grouped, format as a numbered list: "1. sentence_a\\n2. sentence_b"
-   - If not grouped, write as a plain string.
-
-8. "translation_english"
+7. "translation_english"
    - Provide a natural English translation of each example sentence.
    - If grouped, format as a numbered list: "1. translation_a\\n2. translation_b"
    - If not grouped, write as a plain string.
@@ -83,8 +78,9 @@ Rules:
 11. Quality rules
     - Do not omit fields.
     - Do not return null.
-    - Do not add extra fields.
-    - Use natural Japanese, Korean, and English.
+    - Do not add extra fields beyond the schema (especially do not add "meaning_korean").
+    - "_indices" is required on every output object.
+    - Use natural Japanese and English.
     - The extracted word must actually appear in the sentence either directly or as a conjugated form.
     - The extracted word must match the provided Korean meaning as used in the sentence.
     - Numbered list items must be separated by \\n (a JSON newline escape), not by spaces or commas.
@@ -110,22 +106,20 @@ def build_user_prompt(pairs: list[dict]) -> str:
     """
     pairs_json = json.dumps(pairs, ensure_ascii=False, indent=2)
     schema = """{
+  "_indices": [0],
   "word": "string",
   "meaning_english": "string",
-  "meaning_korean": "string",
   "pronunciation": "string",
-  "example": "string",
   "translation_english": "string",
   "translation_korean": "string",
   "example_hiragana": "string"
 }"""
     grouped_example = (
         '{\n'
+        '  "_indices": [0, 1],\n'
         '  "word": "消す",\n'
         '  "meaning_english": "1. erase\\n2. turn off",\n'
-        '  "meaning_korean": "1. 지우다\\n2. 끄다",\n'
         '  "pronunciation": "けす",\n'
-        '  "example": "1. 黒板の字を消す。\\n2. テレビを消す。",\n'
         '  "translation_english": "1. Erase the letters on the blackboard.\\n2. Turn off the TV.",\n'
         '  "translation_korean": "1. 칠판의 글씨를 지우다.\\n2. TV를 끄다.",\n'
         '  "example_hiragana": "1. こくばんのじをけす。\\n2. てれびをけす。"\n'
