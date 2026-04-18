@@ -86,7 +86,7 @@ def extract_vocab(pairs: list[VocabPair]) -> list[VocabEntry]:
 
     # Stage 3: reconstruct meaning_korean and example from original input (OpenAI does not produce them)
     for item in raw_results:
-        indices: list[int] = item.pop("_indices", [])
+        indices: list[int] = sorted(item.pop("_indices", []))
         if not indices:
             raise ValueError("OpenAI response item missing required '_indices' field.")
 
