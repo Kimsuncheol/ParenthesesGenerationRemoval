@@ -40,7 +40,16 @@ def extract_vocab(pairs: list[VocabPair]) -> list[VocabEntry]:
         ValueError            -- structurally wrong response (missing key, empty array); caller maps to HTTP 502
         pydantic.ValidationError -- field-level validation failure in OpenAI output; caller maps to HTTP 422
     """
-    raw_pairs = [p.model_dump() for p in pairs]
+    # Send only example + whichever meaning(s) were provided as context for extraction.
+    raw_pairs = []
+    for p in pairs:
+        d: dict = {"example": p.example}
+        if p.meaning_korean:
+            d["meaning_korean"] = p.meaning_korean
+        if p.meaning_english:
+            d["meaning_english"] = p.meaning_english
+        raw_pairs.append(d)
+
     user_prompt = build_user_prompt(raw_pairs)
 
     response = _client.chat.completions.create(
@@ -84,25 +93,38 @@ def extract_vocab(pairs: list[VocabPair]) -> list[VocabEntry]:
     if out_of_range:
         raise ValueError(f"OpenAI returned out-of-range _indices: {out_of_range}.")
 
-    # Stage 3: reconstruct meaning_korean and example from original input (OpenAI does not produce them)
+    # Stage 3: reconstruct example, meaning_korean, and meaning_english from original input.
+    # Fields provided by the caller are never modified by OpenAI — we overwrite whatever
+    # OpenAI generated with the verbatim request values.
     for item in raw_results:
         indices: list[int] = sorted(item.pop("_indices", []))
         if not indices:
             raise ValueError("OpenAI response item missing required '_indices' field.")
 
-        korean_values = [pairs[i].meaning_korean for i in indices]
         example_values = [pairs[i].example for i in indices]
+        korean_values  = [pairs[i].meaning_korean for i in indices]
+        english_values = [pairs[i].meaning_english for i in indices]
 
-        if len(indices) == 1:
-            item["meaning_korean"] = korean_values[0]
-            item["example"] = example_values[0]
-        else:
-            item["meaning_korean"] = "\n".join(
-                f"{n}. {v}" for n, v in enumerate(korean_values, start=1)
-            )
-            item["example"] = "\n".join(
-                f"{n}. {v}" for n, v in enumerate(example_values, start=1)
-            )
+        def _join(values: list) -> str | None:
+            non_null = [v for v in values if v is not None]
+            if not non_null:
+                return None
+            if len(non_null) == 1 and len(values) == 1:
+                return non_null[0]
+            return "\n".join(f"{n}. {v}" for n, v in enumerate(values, start=1) if v is not None)
+
+        item["example"] = (
+            example_values[0] if len(indices) == 1
+            else "\n".join(f"{n}. {v}" for n, v in enumerate(example_values, start=1))
+        )
+
+        korean_str = _join(korean_values)
+        if korean_str is not None:
+            item["meaning_korean"] = korean_str
+
+        english_str = _join(english_values)
+        if english_str is not None:
+            item["meaning_english"] = english_str
 
     # Stage 4: per-item Pydantic validation — raises ValidationError on failure
     entries = [VocabEntry.model_validate(item) for item in raw_results]

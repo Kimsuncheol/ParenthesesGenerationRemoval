@@ -49,18 +49,24 @@ Rules:
      line separator: "1. meaning_a\\n2. meaning_b"
    - If the row has only one example, write the meaning as a plain string with no number prefix.
 
-5. "_indices"
+5. "meaning_korean"
+   - Generate a short natural Korean dictionary meaning for the extracted word.
+   - Choose the meaning that best matches each sentence's usage.
+   - If grouped, format as a numbered list: "1. 의미_a\\n2. 의미_b"
+   - If not grouped, write as a plain string.
+
+6. "_indices"
    - Must be an array of the 0-based integer indices of the input pairs that were grouped into this row.
    - If only one pair maps to this row, write a single-element array: [2].
    - If multiple pairs were grouped, list all their indices in input order: [0, 1].
    - This field is required on every output object.
 
-6. "pronunciation"
+7. "pronunciation"
    - Must be the full hiragana reading of the extracted word only.
    - No romaji. No spaces.
    - For a grouped row, this is the single shared pronunciation.
 
-7. "translation_english"
+8. "translation_english"
    - Provide a natural English translation of each example sentence.
    - If grouped, format as a numbered list: "1. translation_a\\n2. translation_b"
    - If not grouped, write as a plain string.
@@ -78,11 +84,11 @@ Rules:
 11. Quality rules
     - Do not omit fields.
     - Do not return null.
-    - Do not add extra fields beyond the schema (especially do not add "meaning_korean").
+    - Do not add extra fields beyond the schema.
     - "_indices" is required on every output object.
-    - Use natural Japanese and English.
+    - Use natural Japanese, Korean, and English.
     - The extracted word must actually appear in the sentence either directly or as a conjugated form.
-    - The extracted word must match the provided Korean meaning as used in the sentence.
+    - The extracted word must match the provided meaning as used in the sentence.
     - Numbered list items must be separated by \\n (a JSON newline escape), not by spaces or commas.
     - Do not use bullet points, dashes, or any other list marker.
 
@@ -99,7 +105,8 @@ def build_user_prompt(pairs: list[dict]) -> str:
     """
     Build the user-turn prompt for the vocab extraction task.
 
-    pairs: list of {"example": str, "meaning_korean": str}
+    pairs: list of dicts with "example" and whichever of
+    "meaning_korean" / "meaning_english" were provided by the caller.
     Returns a string that instructs the model to return {"results": [...]}
     with one item per unique target word (may be fewer than len(pairs) when
     multiple pairs share the same word and are grouped into one row).
@@ -109,6 +116,7 @@ def build_user_prompt(pairs: list[dict]) -> str:
   "_indices": [0],
   "word": "string",
   "meaning_english": "string",
+  "meaning_korean": "string",
   "pronunciation": "string",
   "translation_english": "string",
   "translation_korean": "string",
@@ -119,6 +127,7 @@ def build_user_prompt(pairs: list[dict]) -> str:
         '  "_indices": [0, 1],\n'
         '  "word": "消す",\n'
         '  "meaning_english": "1. erase\\n2. turn off",\n'
+        '  "meaning_korean": "1. 지우다\\n2. 끄다",\n'
         '  "pronunciation": "けす",\n'
         '  "translation_english": "1. Erase the letters on the blackboard.\\n2. Turn off the TV.",\n'
         '  "translation_korean": "1. 칠판의 글씨를 지우다.\\n2. TV를 끄다.",\n'
