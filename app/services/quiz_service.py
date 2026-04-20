@@ -11,6 +11,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.config import settings
 from app.models.quiz_models import (
+    EnglishMatchingItem,
     FillBlankOption,
     FillBlankQuestion,
     FillBlankQuizResponse,
@@ -394,7 +395,7 @@ def _build_matching_response(
                 )
             )
         else:
-            items.append(MatchingItem(id=item_id, text=row.target))
+            items.append(EnglishMatchingItem(id=item_id, text=row.target, meaning=row.meaning))
         choices.append(MatchingChoice(id=choice_id, text=row.meaning or ""))
         answer_key.append(MatchingAnswerKeyItem(item_id=item_id, choice_id=choice_id))
 

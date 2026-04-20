@@ -77,6 +77,10 @@ class MatchingItem(BaseModel):
     text: str
 
 
+class EnglishMatchingItem(MatchingItem):
+    meaning: str | None = None
+
+
 class JapaneseMatchingItem(MatchingItem):
     meaningEnglish: str | None = None
     meaningKorean: str | None = None
@@ -98,7 +102,7 @@ class MatchingQuizResponse(BaseModel):
     course: CanonicalQuizCourse
     level: JlptLevel | None
     day: int
-    items: list[MatchingItem | JapaneseMatchingItem]
+    items: list[EnglishMatchingItem | JapaneseMatchingItem]
     choices: list[MatchingChoice]
     answer_key: list[MatchingAnswerKeyItem]
 
