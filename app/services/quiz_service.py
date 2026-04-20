@@ -11,10 +11,12 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.config import settings
 from app.models.quiz_models import (
+    EnglishFillBlankQuestion,
     EnglishMatchingItem,
     FillBlankOption,
     FillBlankQuestion,
     FillBlankQuizResponse,
+    JapaneseFillBlankQuestion,
     JapaneseMatchingItem,
     MatchingAnswerKeyItem,
     MatchingChoice,
@@ -433,7 +435,7 @@ def _build_fill_blank_response(
     ]
 
     raw_results = _request_fill_blank_options(prompt_rows)
-    questions = _validate_fill_blank_results(raw_results, prompt_rows)
+    questions = _validate_fill_blank_results(raw_results, prompt_rows, body.language)
 
     return FillBlankQuizResponse(
         quiz_type="fill_blank",
@@ -468,7 +470,8 @@ def _request_fill_blank_options(prompt_rows: list[dict[str, Any]]) -> _OpenAIFil
 def _validate_fill_blank_results(
     raw_results: _OpenAIFillBlankResponse,
     prompt_rows: list[dict[str, Any]],
-) -> list[FillBlankQuestion]:
+    language: str,
+) -> list[EnglishFillBlankQuestion | JapaneseFillBlankQuestion]:
     expected_ids = [str(row["id"]) for row in prompt_rows]
     results = raw_results.results
 
@@ -477,7 +480,7 @@ def _validate_fill_blank_results(
             f"OpenAI returned {len(results)} fill-blank results for {len(prompt_rows)} rows."
         )
 
-    questions: list[FillBlankQuestion] = []
+    questions: list[EnglishFillBlankQuestion | JapaneseFillBlankQuestion] = []
     for expected_id, result in zip(expected_ids, results, strict=True):
         if result.id != expected_id:
             raise QuizUpstreamError(
@@ -513,15 +516,29 @@ def _validate_fill_blank_results(
             if _option_key(option.text) == _option_key(answer_text)
         )
 
-        questions.append(
-            FillBlankQuestion(
-                id=result.id,
-                sentence=sentence,
-                options=response_options,
-                answer_id=answer_id,
-                answer_text=answer_text,
+        if language == "japanese":
+            questions.append(
+                JapaneseFillBlankQuestion(
+                    id=result.id,
+                    sentence=sentence,
+                    options=response_options,
+                    answer_id=answer_id,
+                    answer_text=answer_text,
+                    translationEnglish=result.translation_english,
+                    translationKorean=result.translation_korean,
+                )
             )
-        )
+        else:
+            questions.append(
+                EnglishFillBlankQuestion(
+                    id=result.id,
+                    sentence=sentence,
+                    options=response_options,
+                    answer_id=answer_id,
+                    answer_text=answer_text,
+                    translation=result.translation_english,
+                )
+            )
 
     return questions
 

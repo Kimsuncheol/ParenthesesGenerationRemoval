@@ -120,13 +120,22 @@ class FillBlankQuestion(BaseModel):
     answer_text: str
 
 
+class EnglishFillBlankQuestion(FillBlankQuestion):
+    translation: str | None = None
+
+
+class JapaneseFillBlankQuestion(FillBlankQuestion):
+    translationEnglish: str | None = None
+    translationKorean: str | None = None
+
+
 class FillBlankQuizResponse(BaseModel):
     quiz_type: Literal["fill_blank"]
     language: QuizLanguage
     course: CanonicalQuizCourse
     level: JlptLevel | None
     day: int
-    questions: list[FillBlankQuestion]
+    questions: list[EnglishFillBlankQuestion | JapaneseFillBlankQuestion]
 
 
 QuizGenerateResponse = MatchingQuizResponse | FillBlankQuizResponse
