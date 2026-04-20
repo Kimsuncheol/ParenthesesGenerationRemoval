@@ -30,13 +30,12 @@ _COURSE_ALIASES: dict[str, CanonicalQuizCourse] = {
 }
 
 
-class QuizGenerateRequest(BaseModel):
+class _QuizBase(BaseModel):
     quiz_type: QuizType
     language: QuizLanguage
     course: str
     level: JlptLevel | None = None
     day: int = Field(ge=1)
-    count: int = Field(ge=1)
 
     @field_validator("course", mode="before")
     @classmethod
@@ -50,7 +49,7 @@ class QuizGenerateRequest(BaseModel):
         return course
 
     @model_validator(mode="after")
-    def validate_course_level(self) -> "QuizGenerateRequest":
+    def validate_course_level(self) -> "_QuizBase":
         if self.language == "japanese":
             if self.course != "JLPT":
                 raise ValueError("Japanese quizzes currently support only course='JLPT'.")
@@ -63,6 +62,14 @@ class QuizGenerateRequest(BaseModel):
         if self.level is not None:
             raise ValueError("level is only valid for Japanese JLPT quizzes.")
         return self
+
+
+class QuizGenerateRequest(_QuizBase):
+    count: int = Field(ge=1)
+
+
+class QuizAccessRequest(_QuizBase):
+    pass
 
 
 class MatchingItem(BaseModel):

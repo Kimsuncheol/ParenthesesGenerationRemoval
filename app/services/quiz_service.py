@@ -19,13 +19,19 @@ from app.models.quiz_models import (
     MatchingChoice,
     MatchingItem,
     MatchingQuizResponse,
+    QuizAccessRequest,
     QuizGenerateRequest,
     QuizGenerateResponse,
+    _QuizBase,
 )
 from app.prompts.quiz_prompt import SYSTEM_PROMPT, build_fill_blank_prompt
 
 
 class QuizUpstreamError(RuntimeError):
+    pass
+
+
+class QuizNotFoundError(LookupError):
     pass
 
 
@@ -73,6 +79,50 @@ _ENGLISH_GENERAL_COURSES = {
 }
 
 _OPTION_IDS = ("a", "b", "c", "d")
+
+_QUIZ_TYPE_PATH: dict[str, str] = {
+    "matching": "matching",
+    "fill_blank": "fill_in_the_blank",
+}
+
+
+def get_quiz(params: QuizAccessRequest) -> dict[str, Any]:
+    try:
+        day_collection = _resolve_collection_path(params)
+        doc_path = _build_quiz_document_path(day_collection, params.day, params.quiz_type)
+        client = _get_firestore_client()
+        doc = client.document(doc_path).get()
+        if not doc.exists:
+            raise QuizNotFoundError(
+                f"No quiz found for course={params.course}, day={params.day}, quiz_type={params.quiz_type}."
+            )
+        return doc.to_dict() or {}
+    except (QuizNotFoundError, QuizUpstreamError):
+        raise
+    except Exception as exc:
+        raise QuizUpstreamError(f"Firestore error: {_format_error(exc)}") from exc
+
+
+def delete_quiz(params: QuizAccessRequest) -> None:
+    try:
+        day_collection = _resolve_collection_path(params)
+        doc_path = _build_quiz_document_path(day_collection, params.day, params.quiz_type)
+        client = _get_firestore_client()
+        doc_ref = client.document(doc_path)
+        if not doc_ref.get().exists:
+            raise QuizNotFoundError(
+                f"No quiz found for course={params.course}, day={params.day}, quiz_type={params.quiz_type}."
+            )
+        doc_ref.delete()
+    except (QuizNotFoundError, QuizUpstreamError):
+        raise
+    except Exception as exc:
+        raise QuizUpstreamError(f"Firestore error: {_format_error(exc)}") from exc
+
+
+def _build_quiz_document_path(day_collection: str, day: int, quiz_type: str) -> str:
+    quiz_segment = _QUIZ_TYPE_PATH[quiz_type]
+    return f"{day_collection}/Day{day}-quiz/{quiz_segment}/data"
 
 
 def generate_quiz(body: QuizGenerateRequest) -> QuizGenerateResponse:
@@ -132,7 +182,7 @@ def _get_firestore_client() -> Any:
     return firestore.client()
 
 
-def _resolve_collection_path(body: QuizGenerateRequest) -> str:
+def _resolve_collection_path(body: _QuizBase) -> str:
     if body.language == "japanese":
         level_paths = {
             "N1": settings.NEXT_PUBLIC_COURSE_PATH_JLPT_N1,
