@@ -37,6 +37,7 @@ class RemoveFuriganaResponse(BaseModel):
 
 class RomanizeRequest(BaseModel):
     text: str
+    language: Literal["ja", "ko"] = "ja"
 
 
 class RomanizeResponse(BaseModel):

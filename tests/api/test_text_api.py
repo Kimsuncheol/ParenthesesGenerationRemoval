@@ -14,6 +14,52 @@ from app.services import manga_service, vocabulary_service
 client = TestClient(app)
 
 
+def test_romanize_endpoint_defaults_to_japanese() -> None:
+    response = client.post("/text/romanize", json={"text": "ねこ"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "ねこ",
+        "romanized_text": "neko",
+    }
+
+
+def test_romanize_endpoint_returns_explicit_japanese() -> None:
+    response = client.post("/text/romanize", json={"text": "ねこ", "language": "ja"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "ねこ",
+        "romanized_text": "neko",
+    }
+
+
+def test_romanize_endpoint_returns_korean() -> None:
+    response = client.post("/text/romanize", json={"text": "안녕하세요", "language": "ko"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "안녕하세요",
+        "romanized_text": "annyeonghase-yo",
+    }
+
+
+def test_romanize_endpoint_returns_empty_korean_text() -> None:
+    response = client.post("/text/romanize", json={"text": "", "language": "ko"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "original_text": "",
+        "romanized_text": "",
+    }
+
+
+def test_romanize_endpoint_validates_language() -> None:
+    response = client.post("/text/romanize", json={"text": "안녕하세요", "language": "invalid"})
+
+    assert response.status_code == 422
+
+
 PLACEHOLDER_ONLY_INPUT = """スイッチを入()れる。
 黒()いスーツを着()る。
 スーツケースを持()ち歩()く。

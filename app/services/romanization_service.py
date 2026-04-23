@@ -1,10 +1,15 @@
 import re
 
 import cutlet
+from hangul_romanize import Transliter
+from hangul_romanize.rule import academic
 import pykakasi
 
 # --- pykakasi: used for hiragana/katakana-only input (no kanji) ---
 _kks = pykakasi.kakasi()
+
+# --- hangul-romanize: used for Korean Hangul input ---
+_hangul_transliter = Transliter(academic)
 
 # --- cutlet: used for mixed or kanji-containing input ---
 # use_wa:  は → wa (topic particle)
@@ -56,3 +61,8 @@ def romanize_ja(text: str) -> str:
     else:
         result = "".join(item["hepburn"] or item["orig"] for item in _kks.convert(text))
     return result
+
+
+def romanize_ko(text: str) -> str:
+    """Convert Korean Hangul text to academic romanization."""
+    return _hangul_transliter.translit(text)

@@ -64,8 +64,11 @@ def generate_parentheses_endpoint(body: GenerateParenthesesRequest) -> GenerateP
 
 @router.post("/romanize", response_model=RomanizeResponse)
 def romanize_endpoint(body: RomanizeRequest) -> RomanizeResponse:
-    result = romanization_service.romanize_ja(body.text)
-    print(result);
+    if body.language == "ko":
+        result = romanization_service.romanize_ko(body.text)
+    else:
+        result = romanization_service.romanize_ja(body.text)
+    print(result)
     return RomanizeResponse(original_text=body.text, romanized_text=result)
 
 
