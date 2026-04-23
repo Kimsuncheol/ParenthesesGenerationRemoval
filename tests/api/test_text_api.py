@@ -40,7 +40,7 @@ def test_romanize_endpoint_returns_korean() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "original_text": "안녕하세요",
-        "romanized_text": "annyeonghase-yo",
+        "romanized_text": "annyeonghaseyo",
     }
 
 

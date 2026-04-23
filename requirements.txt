@@ -4,7 +4,7 @@ requests==2.33.0
 pydantic-settings==2.13.1
 cutlet==0.5.0
 pykakasi==2.3.0
-hangul-romanize==0.1.0
+korean-romanizer==0.28.0
 jaconv==0.5.0
 fugashi==1.5.2
 unidic-lite==1.0.8
