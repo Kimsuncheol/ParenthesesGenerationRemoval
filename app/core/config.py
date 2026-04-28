@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     VOCAB_MAX_PAIRS: int = 20
     QUIZ_GPT_MODEL: str = "gpt-4o"
 
+    KRDICT_API_KEY: str = ""
+    KRDICT_TIMEOUT_SECONDS: float = 5.0
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

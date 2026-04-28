@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from app.core.config import settings
 from app.models.schemas import VocabEntry, VocabPair
 from app.prompts.vocab_prompt import SYSTEM_PROMPT, build_user_prompt
+from app.services import krdict_service
 
 _client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
 
@@ -132,5 +133,9 @@ def extract_vocab(pairs: list[VocabPair]) -> list[VocabEntry]:
     # Stage 5: strip any leading grammatical particle the model prepended to word
     for entry in entries:
         entry.word = _strip_leading_particle(entry.word)
+
+    # Stage 6: enrich with krdict (Korean Learners' Dictionary) data.
+    # Best-effort — silently falls back to OpenAI-only data on any error.
+    entries = krdict_service.enrich_entries(entries, pairs)
 
     return entries
