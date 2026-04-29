@@ -1,28 +1,39 @@
-"""Korean Learners' Dictionary (krdict) integration for vocabulary enrichment.
+"""Korean Learners' Dictionary (krdict) integration for vocabulary extraction.
 
-Provides a best-effort enrichment step that looks up Korean meanings in the
-official Korean Learners' Dictionary (krdict.korean.go.kr) to cross-validate
-and enrich vocabulary entries produced by the OpenAI extraction pipeline.
+Primary word extraction engine: looks up Korean meanings in krdict to obtain
+Japanese translations, then uses fugashi (MeCab) to match those translations
+against lemmas in the example sentence.
 
-If the krdict API key is not configured, the API is unreachable, or no results
-are found, the enrichment step is silently skipped — ensuring the pipeline
-never regresses compared to its OpenAI-only behaviour.
+Falls back gracefully when the API key is not configured, the API is
+unreachable, or no match is found — in those cases ``None`` is returned
+and the caller should fall back to OpenAI extraction.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
+import fugashi
+import jaconv
 import krdict as krdict_lib
 
 from app.core.config import settings
-from app.models.schemas import VocabEntry, VocabPair
 
 logger = logging.getLogger(__name__)
 
 _initialised = False
+_tagger: fugashi.Tagger | None = None
+
+# Regex to strip particles and other noise from krdict translation strings.
+# e.g. "消す（けす）" → "消す",  "消す・けす" → "消す"
+_JA_NOISE_RE = re.compile(r"[（(][^)）]*[)）]|[・、。].*$")
+
+# Characters that indicate the translation contains multiple options separated
+# by delimiters — e.g. "切る, 消す" or "切る・消す"
+_MULTI_WORD_DELIMITERS = re.compile(r"[,，、・/／]")
 
 
 # ---------------------------------------------------------------------------
@@ -30,53 +41,86 @@ _initialised = False
 # ---------------------------------------------------------------------------
 
 def init_krdict() -> None:
-    """Set the krdict API key once at application startup.
+    """Set the krdict API key and initialise fugashi tagger at startup.
 
     Safe to call even when KRDICT_API_KEY is empty — in that case every
-    lookup will return ``None`` (graceful degradation).
+    extraction will return ``None`` (graceful degradation).
     """
-    global _initialised  # noqa: PLW0603
+    global _initialised, _tagger  # noqa: PLW0603
     if settings.KRDICT_API_KEY:
         krdict_lib.set_key(settings.KRDICT_API_KEY)
+        _tagger = fugashi.Tagger()
         _initialised = True
-        logger.info("krdict API key configured — enrichment enabled.")
+        logger.info("krdict API key configured — krdict extraction enabled.")
     else:
         logger.warning(
             "KRDICT_API_KEY is not set. "
-            "Vocabulary enrichment via krdict will be skipped."
+            "krdict word extraction will be skipped (OpenAI fallback)."
         )
 
 
 # ---------------------------------------------------------------------------
-# Dataclass for a single lookup result
+# Result dataclass
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True, slots=True)
-class KrdictLookupResult:
-    """Relevant fields extracted from a krdict search response."""
+class KrdictExtraction:
+    """Result of a successful krdict-based word extraction."""
 
     word: str
-    """Korean headword (e.g. '지우다')."""
+    """Dictionary-form Japanese word extracted from the sentence (e.g. '消す')."""
 
-    definition: str
-    """Korean-language definition from the dictionary."""
-
-    japanese_translation: str | None
-    """Japanese translation string, if available in the response."""
+    pronunciation: str
+    """Hiragana reading of the word (e.g. 'けす')."""
 
 
 # ---------------------------------------------------------------------------
-# Low-level lookup
+# Public API
 # ---------------------------------------------------------------------------
 
-def _search_korean(meaning_korean: str) -> KrdictLookupResult | None:
-    """Search krdict for a Korean word and return structured data.
+def extract_word_from_sentence(
+    sentence: str,
+    meaning_korean: str,
+) -> KrdictExtraction | None:
+    """Try to extract the target Japanese word from *sentence* using *meaning_korean*.
 
-    Returns ``None`` on any error or if no results are found.
+    Steps:
+      1. Look up *meaning_korean* in krdict → obtain Japanese translation(s).
+      2. Tokenise *sentence* with fugashi (MeCab) → get lemma for each token.
+      3. Match any krdict Japanese translation against the token lemmas.
+      4. Return ``KrdictExtraction`` on success, or ``None`` to signal fallback.
+
+    This function never raises — all errors are logged and ``None`` returned.
     """
-    if not _initialised:
+    if not _initialised or _tagger is None:
         return None
 
+    # Step 1: krdict lookup
+    japanese_candidates = _lookup_japanese_translations(meaning_korean)
+    if not japanese_candidates:
+        logger.debug(
+            "krdict: no Japanese translations for meaning_korean=%r",
+            meaning_korean,
+        )
+        return None
+
+    # Step 2: tokenise the sentence
+    try:
+        tokens = _tagger(sentence)
+    except Exception:
+        logger.warning("fugashi tokenisation failed for sentence=%r", sentence, exc_info=True)
+        return None
+
+    # Step 3 & 4: match
+    return _match_candidates_in_tokens(japanese_candidates, tokens)
+
+
+# ---------------------------------------------------------------------------
+# krdict lookup helpers
+# ---------------------------------------------------------------------------
+
+def _lookup_japanese_translations(meaning_korean: str) -> list[str]:
+    """Query krdict for *meaning_korean* and return cleaned Japanese words."""
     try:
         response = krdict_lib.search(
             query=meaning_korean,
@@ -87,205 +131,177 @@ def _search_korean(meaning_korean: str) -> KrdictLookupResult | None:
         logger.warning(
             "krdict search failed for query=%r", meaning_korean, exc_info=True,
         )
-        return None
+        return []
 
-    return _parse_first_result(response)
+    return _parse_japanese_translations(response)
 
 
-def _parse_first_result(response: Any) -> KrdictLookupResult | None:
-    """Extract the first usable result from a krdict search response."""
+def _parse_japanese_translations(response: Any) -> list[str]:
+    """Extract all unique Japanese translation strings from a krdict response."""
+    candidates: list[str] = []
+
     try:
         data = response.data if hasattr(response, "data") else response.get("data")
         if data is None:
-            return None
+            return []
 
         results = data.results if hasattr(data, "results") else data.get("results")
         if not results:
-            return None
+            return []
 
-        first = results[0]
-
-        word = first.word if hasattr(first, "word") else first.get("word")
-        if not word:
-            return None
-
-        # --- Korean definition ---
-        definition = _extract_definition(first)
-
-        # --- Japanese translation ---
-        japanese_translation = _extract_japanese_translation(first)
-
-        return KrdictLookupResult(
-            word=word,
-            definition=definition or "",
-            japanese_translation=japanese_translation,
-        )
+        for result in results:
+            _collect_translations_from_result(result, candidates)
 
     except Exception:
         logger.warning("Failed to parse krdict response", exc_info=True)
-        return None
+
+    return candidates
 
 
-def _extract_definition(result: Any) -> str | None:
-    """Pull the first Korean definition string from a result object."""
+def _collect_translations_from_result(result: Any, candidates: list[str]) -> None:
+    """Append Japanese translation words from a single krdict result."""
     try:
-        # Object-style access (krdict.py typed response)
         if hasattr(result, "definitions"):
             defs = result.definitions
         else:
             defs = result.get("definitions", [])
 
-        if defs:
-            first_def = defs[0]
-            return (
-                first_def.definition
-                if hasattr(first_def, "definition")
-                else first_def.get("definition")
+        for defn in defs:
+            translations = (
+                defn.translations
+                if hasattr(defn, "translations")
+                else defn.get("translations", [])
             )
-    except Exception:
-        pass
-    return None
-
-
-def _extract_japanese_translation(result: Any) -> str | None:
-    """Pull the Japanese translation from a result's first definition."""
-    try:
-        # Navigate: result -> definitions[0] -> translations
-        if hasattr(result, "definitions"):
-            defs = result.definitions
-        else:
-            defs = result.get("definitions", [])
-
-        if not defs:
-            return None
-
-        first_def = defs[0]
-
-        translations = (
-            first_def.translations
-            if hasattr(first_def, "translations")
-            else first_def.get("translations", [])
-        )
-
-        if not translations:
-            return None
-
-        first_trans = translations[0]
-        return (
-            first_trans.word
-            if hasattr(first_trans, "word")
-            else first_trans.get("word")
-        )
-    except Exception:
-        pass
-    return None
-
-
-# ---------------------------------------------------------------------------
-# High-level enrichment
-# ---------------------------------------------------------------------------
-
-def enrich_entries(
-    entries: list[VocabEntry],
-    pairs: list[VocabPair],
-) -> list[VocabEntry]:
-    """Enrich extracted vocabulary entries with krdict data.
-
-    For each entry whose corresponding pair(s) contain ``meaning_korean``,
-    this function queries krdict to:
-
-    1. Retrieve the authoritative Korean definition.
-    2. Retrieve the Japanese translation (if available) for cross-validation
-       against the OpenAI-extracted ``word``.
-
-    The function never raises — all errors are logged and the original
-    entries are returned unmodified when enrichment fails.
-
-    Parameters
-    ----------
-    entries:
-        Vocabulary entries produced by the OpenAI extraction pipeline.
-    pairs:
-        The original input pairs (needed to access ``meaning_korean``).
-
-    Returns
-    -------
-    list[VocabEntry]
-        The same entries list, potentially with updated ``meaning_korean``
-        fields.
-    """
-    if not _initialised:
-        return entries
-
-    for entry in entries:
-        _enrich_single_entry(entry, pairs)
-
-    return entries
-
-
-def _enrich_single_entry(entry: VocabEntry, pairs: list[VocabPair]) -> None:
-    """Try to enrich a single VocabEntry with krdict data."""
-    # Collect all non-null meaning_korean values from the original pairs.
-    # For grouped entries the meaning_korean may be a numbered list like
-    # "1. 지우다\n2. 끄다" — we query each value independently.
-    korean_meanings = _collect_korean_meanings(entry, pairs)
-
-    if not korean_meanings:
-        return
-
-    for meaning in korean_meanings:
-        result = _search_korean(meaning)
-        if result is None:
-            continue
-
-        # Log cross-validation info
-        if result.japanese_translation:
-            logger.info(
-                "krdict cross-validation: meaning_korean=%r → "
-                "krdict_word=%r, japanese_translation=%r, extracted_word=%r",
-                meaning,
-                result.word,
-                result.japanese_translation,
-                entry.word,
-            )
-
-        # Enrich: if krdict provides a richer definition, append it to
-        # the existing meaning_korean (separated by " / ") so both the
-        # user-provided meaning and the dictionary definition are preserved.
-        if result.definition and result.definition != meaning:
-            # Avoid appending if the definition is already present
-            if result.definition not in entry.meaning_korean:
-                entry.meaning_korean = (
-                    f"{entry.meaning_korean} / {result.definition}"
+            for trans in translations:
+                raw_word = (
+                    trans.word
+                    if hasattr(trans, "word")
+                    else trans.get("word")
                 )
+                if not raw_word or not isinstance(raw_word, str):
+                    continue
 
-        # Break after the first successful enrichment for this entry
-        break
+                for cleaned in _clean_japanese_translation(raw_word):
+                    if cleaned and cleaned not in candidates:
+                        candidates.append(cleaned)
+    except Exception:
+        pass
 
 
-def _collect_korean_meanings(
-    entry: VocabEntry,
-    pairs: list[VocabPair],
-) -> list[str]:
-    """Extract individual Korean meaning strings for lookup.
+def _clean_japanese_translation(raw: str) -> list[str]:
+    """Clean a raw krdict Japanese translation string into candidate words.
 
-    Handles both single meanings and numbered-list formats like
-    ``"1. 지우다\\n2. 끄다"``.
+    Handles cases like:
+      - "消す（けす）" → ["消す"]
+      - "切る、消す" → ["切る", "消す"]
+      - "消す" → ["消す"]
     """
-    raw = entry.meaning_korean
-    if not raw:
+    # First strip parenthetical readings
+    cleaned = _JA_NOISE_RE.sub("", raw).strip()
+
+    if not cleaned:
         return []
 
-    lines = raw.strip().split("\n")
-    meanings: list[str] = []
-    for line in lines:
-        cleaned = line.strip()
-        # Strip numbered-list prefix ("1. ", "2. ", etc.)
-        if len(cleaned) > 3 and cleaned[0].isdigit() and cleaned[1] == ".":
-            cleaned = cleaned[3:].strip()
-        elif len(cleaned) > 4 and cleaned[:2].isdigit() and cleaned[2] == ".":
-            cleaned = cleaned[4:].strip()
-        if cleaned:
-            meanings.append(cleaned)
+    # Split on delimiters if present (e.g. "切る、消す")
+    if _MULTI_WORD_DELIMITERS.search(cleaned):
+        parts = _MULTI_WORD_DELIMITERS.split(cleaned)
+        return [p.strip() for p in parts if p.strip()]
 
-    return meanings
+    return [cleaned]
+
+
+# ---------------------------------------------------------------------------
+# Fugashi-based sentence matching
+# ---------------------------------------------------------------------------
+
+def _match_candidates_in_tokens(
+    candidates: list[str],
+    tokens: list,
+) -> KrdictExtraction | None:
+    """Try to match any candidate Japanese word against token lemmas.
+
+    Handles both single-token words (e.g. 消す) and multi-token idiomatic
+    expressions (e.g. 気に入る).
+    """
+    # Build token data for efficient matching
+    token_data = []
+    for t in tokens:
+        feat = t.feature
+        lemma = getattr(feat, "lemma", None)
+        orthBase = getattr(feat, "orthBase", None)
+        kanaBase = getattr(feat, "kanaBase", None)
+        surface = t.surface
+
+        # Clean lemma — fugashi sometimes appends tags like "バス-bus"
+        if lemma and "-" in lemma:
+            lemma = lemma.split("-")[0]
+
+        token_data.append({
+            "surface": surface,
+            "lemma": lemma,
+            "orthBase": orthBase,
+            "kanaBase": kanaBase,
+        })
+
+    for candidate in candidates:
+        result = _try_match_candidate(candidate, token_data)
+        if result is not None:
+            return result
+
+    return None
+
+
+def _try_match_candidate(
+    candidate: str,
+    token_data: list[dict],
+) -> KrdictExtraction | None:
+    """Try to match a single candidate word against the token list."""
+    # Strategy 1: single-token match (most common case)
+    for td in token_data:
+        if td["lemma"] == candidate or td["orthBase"] == candidate:
+            kana = td["kanaBase"]
+            if not kana:
+                continue
+            pronunciation = jaconv.kata2hira(kana)
+            # Use orthBase as the word (dictionary form) if available
+            word = td["orthBase"] or td["lemma"] or candidate
+            return KrdictExtraction(word=word, pronunciation=pronunciation)
+
+    # Strategy 2: multi-token match for compound expressions
+    # e.g. candidate="気に入る" → tokens ["気", "に", "入る"]
+    if len(candidate) > 1:
+        result = _try_multi_token_match(candidate, token_data)
+        if result is not None:
+            return result
+
+    return None
+
+
+def _try_multi_token_match(
+    candidate: str,
+    token_data: list[dict],
+) -> KrdictExtraction | None:
+    """Match a compound expression by concatenating consecutive token surfaces/orthBases."""
+    n = len(token_data)
+
+    for start in range(n):
+        # Try concatenating tokens from this starting position
+        concat_surface = ""
+        concat_orthBase = ""
+        concat_kana = ""
+
+        for end in range(start, min(start + 6, n)):  # limit to 6 tokens
+            concat_surface += token_data[end]["surface"]
+            concat_orthBase += (token_data[end]["orthBase"] or token_data[end]["surface"])
+            concat_kana += (token_data[end]["kanaBase"] or "")
+
+            # Check if the concatenated orthBase matches the candidate
+            if concat_orthBase == candidate:
+                if concat_kana:
+                    pronunciation = jaconv.kata2hira(concat_kana)
+                    return KrdictExtraction(
+                        word=candidate,
+                        pronunciation=pronunciation,
+                    )
+
+    return None

@@ -1,4 +1,5 @@
 import json
+import logging
 
 import openai
 from pydantic import ValidationError
@@ -7,6 +8,8 @@ from app.core.config import settings
 from app.models.schemas import VocabEntry, VocabPair
 from app.prompts.vocab_prompt import SYSTEM_PROMPT, build_user_prompt
 from app.services import krdict_service
+
+logger = logging.getLogger(__name__)
 
 _client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
 
@@ -29,26 +32,64 @@ def _strip_leading_particle(word: str) -> str:
 
 def extract_vocab(pairs: list[VocabPair]) -> list[VocabEntry]:
     """
-    Call OpenAI and return a validated list of VocabEntry objects.
+    Extract vocabulary from (example, meaning) pairs using a two-phase pipeline.
 
-    Pairs that share the same target word are grouped into a single VocabEntry
-    whose multi-valued fields (meaning, example, translations, hiragana) are
-    formatted as numbered lists ("1. value\\n2. value"). The returned list may
-    therefore contain fewer items than the input pairs list.
+    Phase 1 — krdict extraction (per pair):
+        For each pair with meaning_korean, try to extract the target word
+        via krdict lookup + fugashi sentence tokenisation.
+
+    Phase 2 — OpenAI completion:
+        Send all pairs to OpenAI. Pairs with pre-extracted words include
+        "word" and "pronunciation" hints so OpenAI only needs to fill in
+        the remaining fields (translations, hiragana, etc.).
+        Pairs where krdict failed get full OpenAI extraction as before.
 
     Raises:
         openai.OpenAIError    -- network, auth, rate-limit, or server errors; caller maps to HTTP 502
         ValueError            -- structurally wrong response (missing key, empty array); caller maps to HTTP 502
         pydantic.ValidationError -- field-level validation failure in OpenAI output; caller maps to HTTP 422
     """
-    # Send only example + whichever meaning(s) were provided as context for extraction.
-    raw_pairs = []
+    # ── Phase 1: krdict extraction ──────────────────────────────────────
+    krdict_results: list[krdict_service.KrdictExtraction | None] = []
     for p in pairs:
+        if p.meaning_korean:
+            extraction = krdict_service.extract_word_from_sentence(
+                sentence=p.example,
+                meaning_korean=p.meaning_korean,
+            )
+            krdict_results.append(extraction)
+            if extraction:
+                logger.info(
+                    "krdict extracted: meaning_korean=%r → word=%r, pronunciation=%r",
+                    p.meaning_korean,
+                    extraction.word,
+                    extraction.pronunciation,
+                )
+        else:
+            krdict_results.append(None)
+
+    krdict_count = sum(1 for r in krdict_results if r is not None)
+    logger.info(
+        "krdict extraction: %d/%d pairs succeeded",
+        krdict_count,
+        len(pairs),
+    )
+
+    # ── Phase 2: OpenAI for remaining fields ────────────────────────────
+    raw_pairs = []
+    for i, p in enumerate(pairs):
         d: dict = {"example": p.example}
         if p.meaning_korean:
             d["meaning_korean"] = p.meaning_korean
         if p.meaning_english:
             d["meaning_english"] = p.meaning_english
+
+        # Include pre-extracted word hints from krdict
+        extraction = krdict_results[i]
+        if extraction is not None:
+            d["word"] = extraction.word
+            d["pronunciation"] = extraction.pronunciation
+
         raw_pairs.append(d)
 
     user_prompt = build_user_prompt(raw_pairs)
@@ -97,6 +138,7 @@ def extract_vocab(pairs: list[VocabPair]) -> list[VocabEntry]:
     # Stage 3: reconstruct example, meaning_korean, and meaning_english from original input.
     # Fields provided by the caller are never modified by OpenAI — we overwrite whatever
     # OpenAI generated with the verbatim request values.
+    # Also enforce krdict-extracted word/pronunciation when available.
     for item in raw_results:
         indices: list[int] = sorted(item.pop("_indices", []))
         if not indices:
@@ -127,15 +169,20 @@ def extract_vocab(pairs: list[VocabPair]) -> list[VocabEntry]:
         if english_str is not None:
             item["meaning_english"] = english_str
 
+        # Enforce krdict-extracted word and pronunciation for the first pair in the group.
+        # If krdict succeeded for any pair in this group, use its word/pronunciation.
+        for idx in indices:
+            extraction = krdict_results[idx]
+            if extraction is not None:
+                item["word"] = extraction.word
+                item["pronunciation"] = extraction.pronunciation
+                break
+
     # Stage 4: per-item Pydantic validation — raises ValidationError on failure
     entries = [VocabEntry.model_validate(item) for item in raw_results]
 
     # Stage 5: strip any leading grammatical particle the model prepended to word
     for entry in entries:
         entry.word = _strip_leading_particle(entry.word)
-
-    # Stage 6: enrich with krdict (Korean Learners' Dictionary) data.
-    # Best-effort — silently falls back to OpenAI-only data on any error.
-    entries = krdict_service.enrich_entries(entries, pairs)
 
     return entries
