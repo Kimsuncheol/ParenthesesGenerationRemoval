@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     VOCAB_GPT_MODEL: str = "gpt-4o"
     VOCAB_MAX_PAIRS: int = 20
     QUIZ_GPT_MODEL: str = "gpt-4o"
+    QUIZ_MAX_QUESTIONS: int = 20
 
     KRDICT_API_KEY: str = ""
     KRDICT_TIMEOUT_SECONDS: float = 5.0

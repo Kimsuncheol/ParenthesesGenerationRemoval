@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from main import app
 from app.models.quiz_models import (
+    EnglishMatchingItem,
     FillBlankOption,
     FillBlankQuestion,
     FillBlankQuizResponse,
@@ -21,6 +22,202 @@ from app.services import quiz_service
 
 
 client = TestClient(app)
+
+
+@pytest.mark.parametrize(
+    ("request_json", "expected_language", "expected_course", "expected_level", "expected_day"),
+    [
+        (
+            {
+                "pop_quiz_type": "matching_game",
+                "language": "english",
+                "course": "COLLOCATION",
+                "day": 12,
+                "count": 1,
+            },
+            "english",
+            "COLLOCATION",
+            None,
+            12,
+        ),
+        (
+            {
+                "pop_quiz_type": "matching_game",
+                "language": "english",
+                "course": "CSAT_IDIOMS",
+                "day": 2,
+                "count": 1,
+            },
+            "english",
+            "CSAT_IDIOMS",
+            None,
+            2,
+        ),
+        (
+            {
+                "pop_quiz_type": "matching_game",
+                "language": "japanese",
+                "course": "JLPT",
+                "level": "N2",
+                "day": 3,
+                "count": 1,
+            },
+            "japanese",
+            "JLPT",
+            "N2",
+            3,
+        ),
+    ],
+)
+def test_pop_quiz_generate_endpoint_success_for_matching_game_courses(
+    request_json: dict[str, object],
+    expected_language: str,
+    expected_course: str,
+    expected_level: str | None,
+    expected_day: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = {}
+
+    def mock_generate(body):
+        captured["body"] = body
+        item = (
+            JapaneseMatchingItem(
+                id="q1",
+                text="解決",
+                meaningEnglish="solution",
+                meaningKorean="해결",
+            )
+            if body.language == "japanese"
+            else EnglishMatchingItem(id="q1", text="make a decision", meaning="decide")
+        )
+        return MatchingQuizResponse(
+            quiz_type="matching",
+            language=body.language,
+            course=body.course,
+            level=body.level,
+            day=body.day,
+            items=[item],
+            choices=[MatchingChoice(id="c1", text="decide")],
+            answer_key=[MatchingAnswerKeyItem(item_id="q1", choice_id="c1")],
+        )
+
+    monkeypatch.setattr(quiz_service, "generate_quiz", mock_generate)
+
+    response = client.post("/v1/pop-quizzes/generate", json=request_json)
+
+    assert response.status_code == 200
+    response_data = response.json()
+    assert captured["body"].quiz_type == "matching"
+    assert captured["body"].language == expected_language
+    assert captured["body"].course == expected_course
+    assert captured["body"].level == expected_level
+    assert captured["body"].day == expected_day
+    assert response_data["pop_quiz_type"] == "matching_game"
+    assert "quiz_type" not in response_data
+    assert response_data["course"] == expected_course
+    assert response_data["day"] == expected_day
+    assert response_data["answer_key"] == [{"item_id": "q1", "choice_id": "c1"}]
+    if expected_language == "japanese":
+        assert response_data["items"][0]["meaningEnglish"] == "solution"
+        assert response_data["items"][0]["meaningKorean"] == "해결"
+    else:
+        assert response_data["items"][0]["meaning"] == "decide"
+
+
+@pytest.mark.parametrize(
+    "request_json",
+    [
+        {
+            "pop_quiz_type": "flash_card",
+            "language": "english",
+            "course": "CSAT",
+            "day": 1,
+            "count": 1,
+        },
+        {
+            "pop_quiz_type": "matching_game",
+            "language": "japanese",
+            "course": "JLPT",
+            "day": 1,
+            "count": 1,
+        },
+        {
+            "pop_quiz_type": "matching_game",
+            "language": "english",
+            "course": "CSAT",
+            "level": "N1",
+            "day": 1,
+            "count": 1,
+        },
+        {
+            "pop_quiz_type": "matching_game",
+            "language": "english",
+            "course": "CSAT",
+            "day": 1,
+            "count": 21,
+        },
+    ],
+)
+def test_pop_quiz_generate_endpoint_validates_request_before_generation(
+    request_json: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_generate(body):
+        pytest.fail("pop quiz generation should not run for invalid requests")
+
+    monkeypatch.setattr(quiz_service, "generate_quiz", fail_generate)
+
+    response = client.post("/v1/pop-quizzes/generate", json=request_json)
+
+    assert response.status_code == 422
+
+
+def test_pop_quiz_generate_endpoint_returns_422_when_not_enough_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def mock_generate(body):
+        raise quiz_service.NotEnoughQuizItemsError(requested=3, available=1)
+
+    monkeypatch.setattr(quiz_service, "generate_quiz", mock_generate)
+
+    response = client.post(
+        "/v1/pop-quizzes/generate",
+        json={
+            "pop_quiz_type": "matching_game",
+            "language": "english",
+            "course": "CSAT",
+            "day": 1,
+            "count": 3,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["requested"] == 3
+    assert response.json()["detail"]["available"] == 1
+
+
+def test_pop_quiz_generate_endpoint_returns_502_on_upstream_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def mock_generate(body):
+        raise quiz_service.QuizUpstreamError("Firestore error: unavailable")
+
+    monkeypatch.setattr(quiz_service, "generate_quiz", mock_generate)
+
+    response = client.post(
+        "/v1/pop-quizzes/generate",
+        json={
+            "pop_quiz_type": "matching_game",
+            "language": "english",
+            "course": "CSAT",
+            "day": 1,
+            "count": 1,
+        },
+    )
+
+    assert response.status_code == 502
+    assert "unavailable" in response.json()["detail"]
 
 
 def test_quiz_generate_endpoint_success(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -215,6 +412,34 @@ def test_quiz_generate_endpoint_returns_422_when_not_enough_rows(
     assert response.json()["detail"]["available"] == 1
 
 
+@pytest.mark.parametrize("quiz_type", ["matching", "fill_blank"])
+def test_quiz_generate_endpoint_rejects_oversized_count_before_generation(
+    quiz_type: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_generate(body):
+        pytest.fail("quiz generation should not run for oversized count")
+
+    monkeypatch.setattr(quiz_service, "generate_quiz", fail_generate)
+
+    response = client.post(
+        "/v1/quizzes/generate",
+        json={
+            "quiz_type": quiz_type,
+            "language": "english",
+            "course": "CSAT",
+            "day": 1,
+            "count": 21,
+        },
+    )
+
+    assert response.status_code == 422
+    assert any(
+        "count" in [str(location_part) for location_part in error.get("loc", [])]
+        for error in response.json()["detail"]
+    )
+
+
 def test_quiz_generate_endpoint_returns_502_on_upstream_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -335,6 +560,13 @@ def test_openapi_includes_quiz_generate_path() -> None:
     schema = app.openapi()
 
     assert "/v1/quizzes/generate" in schema["paths"]
+
+
+def test_openapi_includes_pop_quiz_generate_path() -> None:
+    app.openapi_schema = None
+    schema = app.openapi()
+
+    assert "/v1/pop-quizzes/generate" in schema["paths"]
 
 
 def test_openapi_excludes_fill_blank_translation_fields() -> None:

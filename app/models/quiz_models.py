@@ -2,8 +2,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.core.config import settings
+
 
 QuizType = Literal["matching", "fill_blank"]
+PopQuizType = Literal["matching_game"]
 QuizLanguage = Literal["english", "japanese"]
 CanonicalQuizCourse = Literal[
     "CSAT",
@@ -30,8 +33,7 @@ _COURSE_ALIASES: dict[str, CanonicalQuizCourse] = {
 }
 
 
-class _QuizBase(BaseModel):
-    quiz_type: QuizType
+class _QuizCourseBase(BaseModel):
     language: QuizLanguage
     course: str
     level: JlptLevel | None = None
@@ -49,7 +51,7 @@ class _QuizBase(BaseModel):
         return course
 
     @model_validator(mode="after")
-    def validate_course_level(self) -> "_QuizBase":
+    def validate_course_level(self) -> "_QuizCourseBase":
         if self.language == "japanese":
             if self.course != "JLPT":
                 raise ValueError("Japanese quizzes currently support only course='JLPT'.")
@@ -64,8 +66,12 @@ class _QuizBase(BaseModel):
         return self
 
 
+class _QuizBase(_QuizCourseBase):
+    quiz_type: QuizType
+
+
 class QuizGenerateRequest(_QuizBase):
-    count: int = Field(ge=1)
+    count: int = Field(ge=1, le=settings.QUIZ_MAX_QUESTIONS)
 
 
 class QuizAccessRequest(_QuizBase):
@@ -102,7 +108,23 @@ class MatchingQuizResponse(BaseModel):
     course: CanonicalQuizCourse
     level: JlptLevel | None
     day: int
-    items: list[EnglishMatchingItem | JapaneseMatchingItem]
+    items: list[EnglishMatchingItem | JapaneseMatchingItem | MatchingItem]
+    choices: list[MatchingChoice]
+    answer_key: list[MatchingAnswerKeyItem]
+
+
+class PopQuizGenerateRequest(_QuizCourseBase):
+    pop_quiz_type: PopQuizType
+    count: int = Field(ge=1, le=settings.QUIZ_MAX_QUESTIONS)
+
+
+class PopQuizMatchingGameResponse(BaseModel):
+    pop_quiz_type: Literal["matching_game"]
+    language: QuizLanguage
+    course: CanonicalQuizCourse
+    level: JlptLevel | None
+    day: int
+    items: list[EnglishMatchingItem | JapaneseMatchingItem | MatchingItem]
     choices: list[MatchingChoice]
     answer_key: list[MatchingAnswerKeyItem]
 
@@ -135,7 +157,7 @@ class FillBlankQuizResponse(BaseModel):
     course: CanonicalQuizCourse
     level: JlptLevel | None
     day: int
-    questions: list[EnglishFillBlankQuestion | JapaneseFillBlankQuestion]
+    questions: list[EnglishFillBlankQuestion | JapaneseFillBlankQuestion | FillBlankQuestion]
 
 
 QuizGenerateResponse = MatchingQuizResponse | FillBlankQuizResponse
