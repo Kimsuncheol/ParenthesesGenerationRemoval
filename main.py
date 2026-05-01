@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.core.config import settings
+from app.routers import analyze as analyze_router
 from app.routers import index as index_router
 from app.routers import text as text_router
 from app.api.routes import pop_quizzes as pop_quizzes_router
@@ -17,6 +18,7 @@ app = FastAPI(
 )
 
 app.include_router(index_router.router)
+app.include_router(analyze_router.router)
 app.include_router(text_router.router)
 app.include_router(pop_quizzes_router.router)
 app.include_router(quizzes_router.router)

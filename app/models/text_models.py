@@ -45,6 +45,23 @@ class RomanizeResponse(BaseModel):
     romanized_text: str
 
 
+class AnalyzeRequest(BaseModel):
+    language: Literal["en", "ja"]
+    sentence: str
+    target_base_form: str
+
+
+class AnalyzeMatch(BaseModel):
+    answer: str
+    start: int
+    end: int
+
+
+class AnalyzeResponse(BaseModel):
+    masked_sentence: str
+    matches: list[AnalyzeMatch]
+
+
 class GenerateParenthesesRequest(BaseModel):
     text: str
 
